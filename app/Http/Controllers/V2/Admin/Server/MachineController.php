@@ -240,14 +240,19 @@ class MachineController extends Controller
     private function buildInstallCommand(Request $request, ServerMachine $machine): string
     {
         $panelUrl = rtrim((string) (admin_setting('app_url') ?: $request->getSchemeAndHttpHost()), '/');
-        $installerUrl = 'https://raw.githubusercontent.com/guimc233/Xboard-Node/dev/install.sh';
+        // The installer script and the agent binaries must come from the same
+        // repository, so the download base is pinned explicitly instead of
+        // relying on the script's built-in default.
+        $repository = 'guimc233/Xboard-Node';
+        $installerUrl = sprintf('https://raw.githubusercontent.com/%s/dev/install.sh', $repository);
 
         return sprintf(
-            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d',
+            'curl -fsSL %s | sudo bash -s -- --mode machine --panel %s --token %s --machine-id %d --repository %s',
             $installerUrl,
             escapeshellarg($panelUrl),
             escapeshellarg($machine->token),
-            $machine->id
+            $machine->id,
+            escapeshellarg($repository)
         );
     }
 }
