@@ -39,7 +39,7 @@ const networkPresets: Record<string, NetworkPreset[]> = {
   httpupgrade: [{
     id: 'httpupgrade',
     label: 'HttpUpgrade',
-    content: { acceptProxyProtocol: false, path: '/', host: 'xray.com', headers: { key: 'value' } },
+    content: { acceptProxyProtocol: false, path: '/', host: 'example.com', headers: { key: 'value' } },
   }],
   xhttp: [{
     id: 'xhttp',

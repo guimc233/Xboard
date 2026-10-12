@@ -9,6 +9,9 @@ use App\Models\ServerRoute;
 use App\Models\RuleSet;
 use App\Models\User;
 use App\Services\Plugin\HookManager;
+use App\Support\Mihomo;
+use App\Support\Mihomo\ListenerBuilder;
+use App\Support\Mihomo\RuleBuilder;
 use App\Utils\CacheKey;
 use App\Utils\Helper;
 use Illuminate\Support\Facades\Cache;
@@ -300,7 +303,7 @@ class ServerService
     public static function buildNodeConfig(Server $node): array
     {
         $node->loadMissing(['outboundTemplates', 'routeTemplates', 'routeProfiles.outboundTemplate']);
-        $nodeType = $node->type;
+        $nodeType = Server::normalizeType($node->type) ?? $node->type;
         $protocolSettings = $node->protocol_settings;
         $serverPort = $node->server_port;
         $host = $node->host;
@@ -356,23 +359,19 @@ class ServerService
                     },
                 'multiplex' => data_get($protocolSettings, 'multiplex'),
             ],
-            'hysteria' => [
+            'hysteria2' => [
                 ...$baseConfig,
                 'server_port' => (int) $serverPort,
                 'version' => (int) $protocolSettings['version'],
                 'host' => $host,
-                'server_name' => $protocolSettings['tls']['server_name'],
+                'server_name' => data_get($protocolSettings, 'tls.server_name'),
                 'tls_settings' => $protocolSettings['tls'],
-                'up_mbps' => (int) $protocolSettings['bandwidth']['up'],
-                'down_mbps' => (int) $protocolSettings['bandwidth']['down'],
-                ...match ((int) $protocolSettings['version']) {
-                        1 => ['obfs' => $protocolSettings['obfs']['password'] ?? null],
-                        2 => [
-                            'obfs' => $protocolSettings['obfs']['open'] ? $protocolSettings['obfs']['type'] : null,
-                            'obfs-password' => $protocolSettings['obfs']['password'] ?? null,
-                        ],
-                        default => [],
-                    },
+                'up_mbps' => (int) (data_get($protocolSettings, 'up') ?? data_get($protocolSettings, 'bandwidth.up')),
+                'down_mbps' => (int) (data_get($protocolSettings, 'down') ?? data_get($protocolSettings, 'bandwidth.down')),
+                'obfs' => data_get($protocolSettings, 'obfs.open') ? data_get($protocolSettings, 'obfs.type') : null,
+                'obfs-password' => data_get($protocolSettings, 'obfs.password') ?? data_get($protocolSettings, 'obfs_password'),
+                'masquerade' => data_get($protocolSettings, 'masquerade'),
+                'bbr_profile' => data_get($protocolSettings, 'bbr_profile'),
             ],
             'tuic' => [
                 ...$baseConfig,
@@ -392,29 +391,54 @@ class ServerService
                 'tls_settings' => $protocolSettings['tls'],
                 'padding_scheme' => $protocolSettings['padding_scheme'],
             ],
-            'socks' => [
+            'socks', 'mixed' => [
+                ...$baseConfig,
+                'server_port' => (int) $serverPort,
+                'tls' => (int) data_get($protocolSettings, 'tls', 0),
+                'tls_settings' => data_get($protocolSettings, 'tls_settings'),
+                'udp' => (bool) data_get($protocolSettings, 'udp', true),
+            ],
+            'http' => [
                 ...$baseConfig,
                 'server_port' => (int) $serverPort,
                 'tls' => (int) data_get($protocolSettings, 'tls', 0),
                 'tls_settings' => data_get($protocolSettings, 'tls_settings'),
             ],
-            'naive' => [
-                ...$baseConfig,
-                'server_port' => (int) $serverPort,
-                'tls' => (int) $protocolSettings['tls'],
-                'tls_settings' => $protocolSettings['tls_settings'],
-            ],
-            'http' => [
-                ...$baseConfig,
-                'server_port' => (int) $serverPort,
-                'tls' => (int) $protocolSettings['tls'],
-                'tls_settings' => $protocolSettings['tls_settings'],
-            ],
             'mieru' => [
                 ...$baseConfig,
                 'server_port' => (int) $serverPort,
                 'transport' => data_get($protocolSettings, 'transport', 'TCP'),
-                'traffic_pattern' => $protocolSettings['traffic_pattern'],
+                'traffic_pattern' => data_get($protocolSettings, 'traffic_pattern'),
+            ],
+            'snell' => [
+                ...$baseConfig,
+                'server_port' => (int) $serverPort,
+                'psk' => data_get($protocolSettings, 'psk'),
+                'version' => (int) data_get($protocolSettings, 'version', 4),
+                'udp' => (bool) data_get($protocolSettings, 'udp', true),
+                'obfs_opts' => data_get($protocolSettings, 'obfs_opts'),
+            ],
+            'sudoku' => [
+                ...$baseConfig,
+                'server_port' => (int) $serverPort,
+                'key' => data_get($protocolSettings, 'key'),
+                'aead_method' => data_get($protocolSettings, 'aead_method'),
+                'table_type' => data_get($protocolSettings, 'table_type'),
+                'httpmask' => data_get($protocolSettings, 'httpmask'),
+            ],
+            'shadowquic' => [
+                ...$baseConfig,
+                'server_port' => (int) $serverPort,
+                'jls_upstream' => data_get($protocolSettings, 'jls_upstream'),
+                'alpn' => data_get($protocolSettings, 'alpn'),
+                'congestion_controller' => data_get($protocolSettings, 'congestion_controller'),
+            ],
+            'trusttunnel' => [
+                ...$baseConfig,
+                'server_port' => (int) $serverPort,
+                'server_name' => data_get($protocolSettings, 'tls.server_name'),
+                'network' => data_get($protocolSettings, 'network'),
+                'congestion_controller' => data_get($protocolSettings, 'congestion_controller'),
             ],
             default => [],
         };
@@ -437,9 +461,8 @@ class ServerService
             ])->values()->all();
 
         // Older Xboard entries used Xray-shaped address/port settings. Promote
-        // the common Shadowsocks/SOCKS forms into the normalized dual-core
-        // channel so sing-box receives server/server_port while Xray still gets
-        // its native nested structure from xbnode.
+        // the common Shadowsocks/SOCKS forms into the normalized channel so the
+        // mihomo listener builder receives server/server_port directly.
         $normalizedTags = collect($normalizedOutbounds)->pluck('tag')->filter()->all();
         $remainingLegacyOutbounds = [];
         foreach (($node['custom_outbounds'] ?? []) as $legacyOutbound) {
@@ -528,8 +551,8 @@ class ServerService
         if ($usedRuleSets->isNotEmpty()) {
             $response['rule_sets'] = $usedRuleSets->values()->map(fn (RuleSet $ruleSet) => [
                 'tag' => $ruleSet->tag,
-                'singbox' => data_get($ruleSet->settings, 'singbox'),
-                'xray' => data_get($ruleSet->settings, 'xray'),
+                'mihomo' => data_get($ruleSet->settings, 'mihomo'),
+                'legacy' => data_get($ruleSet->settings, 'legacy'),
             ])->all();
         }
 
@@ -565,7 +588,82 @@ class ServerService
             }
         }
 
+        // ------------------------------------------------------------------
+        // mihomo kernel payload: a ready-to-use listener entry plus the route
+        // providers/rules/sub-rules it references. The flat legacy keys above
+        // are kept so older agents keep working during the migration window.
+        // ------------------------------------------------------------------
+        $response['kernel'] = Mihomo::KERNEL;
+        $response['mihomo'] = self::buildMihomoConfig($node, $protocolSettings, $serverPort, $normalizedRoutes, $response['rule_sets'] ?? []);
+
         return $response;
+    }
+
+    /**
+     * Assemble the mihomo configuration fragment for a node.
+     *
+     * @param list<array<string, mixed>> $normalizedRoutes
+     * @param list<array<string, mixed>> $ruleSets
+     * @return array<string, mixed>
+     */
+    public static function buildMihomoConfig(Server $node, array $protocolSettings, int|string $serverPort, array $normalizedRoutes = [], array $ruleSets = []): array
+    {
+        $listener = ListenerBuilder::build([
+            'id' => $node->id,
+            'code' => $node->code,
+            'type' => $node->type,
+            'port' => $node->port,
+            'server_port' => $serverPort,
+            'created_at' => $node->created_at,
+            'protocol_settings' => $protocolSettings,
+            'cert_config' => $node->cert_config,
+        ]);
+
+        $providers = RuleBuilder::ruleProviders($ruleSets);
+        $rules = RuleBuilder::rules($normalizedRoutes, $providers);
+        $subRules = RuleBuilder::subRules($normalizedRoutes, $providers);
+
+        $config = ListenerBuilder::compile(
+            $listener === [] ? [] : [$listener],
+            $providers,
+            $rules,
+            $subRules
+        );
+
+        if ($sniffer = self::mihomoSniffer($protocolSettings)) {
+            $config['sniffer'] = $sniffer;
+        }
+
+        // Per-user credentials keep flowing through the dedicated user channel
+        // (`/server/user`, `sync.users`). This tells the agent which mihomo
+        // `users` container the inbound expects so it can shape them without
+        // hard-coding the twelve protocol variants:
+        //   map | array_user_password | array_uuid | array_password
+        $config['users_shape'] = Mihomo::userShape($node->type);
+
+        return $config;
+    }
+
+    /**
+     * Per-node sniffing. mihomo only supports global sniffing, so a node that
+     * asks for it contributes the overrides it needs.
+     *
+     * @param array<string, mixed> $protocolSettings
+     * @return array<string, mixed>|null
+     */
+    private static function mihomoSniffer(array $protocolSettings): ?array
+    {
+        $enabled = filter_var($protocolSettings['sniff'] ?? false, FILTER_VALIDATE_BOOL)
+            || filter_var($protocolSettings['sniff_override'] ?? false, FILTER_VALIDATE_BOOL);
+
+        if (!$enabled) {
+            return null;
+        }
+
+        return [
+            'enable' => true,
+            'override-destination' => (bool) filter_var($protocolSettings['sniff_override'] ?? false, FILTER_VALIDATE_BOOL),
+        ];
     }
 
     /**

@@ -251,8 +251,20 @@ abstract class AbstractProtocol
     protected function filterByAllowedProtocols(): void
     {
         if (!empty($this->allowedProtocols)) {
+            // Compare canonical kernel types so rows written before the mihomo
+            // migration (e.g. `hysteria`) are still matched against the new
+            // canonical names (`hysteria2`).
+            $allowed = array_map(
+                fn ($type) => Mihomo::normalizeType($type) ?? $type,
+                $this->allowedProtocols
+            );
+
             $this->servers = collect($this->servers)
-                ->filter(fn($server) => in_array($server['type'], $this->allowedProtocols))
+                ->filter(function ($server) use ($allowed) {
+                    $type = Mihomo::normalizeType($server['type'] ?? null) ?? ($server['type'] ?? null);
+
+                    return in_array($type, $allowed, true);
+                })
                 ->values()
                 ->all();
         }

@@ -231,19 +231,24 @@ class RoutingTemplateController extends Controller
             ],
             'enabled' => 'nullable|boolean',
             'settings' => 'required|array',
-            'settings.singbox' => 'required|array',
-            'settings.singbox.type' => 'required|string|in:remote,local',
-            'settings.singbox.format' => 'required|string|in:binary,source',
-            'settings.singbox.url' => ['nullable', 'required_if:settings.singbox.type,remote', 'url:http,https', 'max:2048'],
-            'settings.singbox.path' => 'nullable|required_if:settings.singbox.type,local|string|max:1024',
-            'settings.singbox.download_detour' => 'nullable|string|max:64',
-            'settings.singbox.update_interval' => ['nullable', 'string', 'max:32', 'regex:/^\d+(?:s|m|h|d)$/'],
-            'settings.xray' => 'required|array',
-            'settings.xray.type' => 'required|string|in:geosite,geoip,ext-domain,ext-ip',
-            'settings.xray.tag' => 'required|string|max:255',
-            'settings.xray.url' => ['nullable', 'url:http,https', 'max:2048'],
-            'settings.xray.file_name' => ['nullable', 'required_if:settings.xray.type,ext-domain,ext-ip', 'string', 'max:255', 'regex:/^[a-zA-Z0-9_.-]+$/'],
+            // mihomo rule-provider: type/behavior/format are the enums the
+            // kernel actually accepts; everything else maps onto its schema.
+            'settings.mihomo' => 'required|array',
+            'settings.mihomo.type' => 'required|string|in:http,file,inline',
+            'settings.mihomo.behavior' => 'required|string|in:domain,ipcidr,classical',
+            'settings.mihomo.format' => 'nullable|string|in:yaml,text,mrs',
+            'settings.mihomo.url' => ['nullable', 'required_if:settings.mihomo.type,http', 'url:http,https', 'max:2048'],
+            'settings.mihomo.path' => ['nullable', 'required_if:settings.mihomo.type,file', 'string', 'max:1024'],
+            'settings.mihomo.interval' => ['nullable', 'string', 'max:32', 'regex:/^\d+(?:s|m|h|d)?$/'],
+            'settings.mihomo.proxy' => 'nullable|string|max:64',
+            'settings.mihomo.size_limit' => 'nullable|integer|min:0',
+            'settings.mihomo.header' => 'nullable|array',
+            'settings.mihomo.payload' => ['nullable', 'required_if:settings.mihomo.type,inline', 'array'],
+            'settings.mihomo.payload.*' => 'nullable|string',
+            'settings.legacy' => 'nullable|array',
         ]);
+
+        $this->assertValidRuleProvider($params['settings']['mihomo']);
 
         $ruleSet = !empty($params['id']) ? RuleSet::findOrFail($params['id']) : new RuleSet();
         $ruleSet->fill([
@@ -257,6 +262,31 @@ class RoutingTemplateController extends Controller
         NodeConfigVersionService::bumpMany($affectedServerIds);
 
         return $this->success(['id' => $ruleSet->id, 'uuid' => $ruleSet->uuid]);
+    }
+
+    /**
+     * Reject rule-provider combinations mihomo refuses to load, so the panel
+     * fails fast instead of pushing a config that aborts the whole kernel.
+     *
+     * @param array<string, mixed> $provider
+     */
+    private function assertValidRuleProvider(array $provider): void
+    {
+        $format = $provider['format'] ?? 'yaml';
+        $behavior = $provider['behavior'] ?? 'domain';
+
+        // MRS is a binary format whose header encodes domain/ipcidr only.
+        if ($format === 'mrs' && $behavior === 'classical') {
+            throw new ApiException('MRS 规则集只支持 domain 或 ipcidr 行为，classical 请使用 yaml/text。');
+        }
+
+        if ($behavior === 'classical' && !empty($provider['payload'])) {
+            foreach ($provider['payload'] as $line) {
+                if (preg_match('/^\s*(MATCH|RULE-SET|SUB-RULE)\b/i', (string) $line)) {
+                    throw new ApiException('classical 规则集内不允许 MATCH、RULE-SET 或 SUB-RULE 规则。');
+                }
+            }
+        }
     }
 
     public function configureServer(Request $request, RouteIdentityService $identityService)

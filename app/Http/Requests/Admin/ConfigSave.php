@@ -106,12 +106,7 @@ class ConfigSave extends FormRequest
         'password_limit_expire' => 'integer',
         'default_remind_expire' => 'boolean',
         'default_remind_traffic' => 'boolean',
-        'subscribe_template_singbox' => 'nullable',
-        'subscribe_template_clash' => 'nullable',
-        'subscribe_template_clashmeta' => 'nullable',
-        'subscribe_template_stash' => 'nullable',
-        'subscribe_template_surge' => 'nullable',
-        'subscribe_template_surfboard' => 'nullable'
+        'subscribe_template_clashmeta' => 'nullable'
     ];
     /**
      * Get the validation rules that apply to the request.

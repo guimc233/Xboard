@@ -20,6 +20,7 @@ Xboard is a modern panel system built on Laravel 11, focusing on providing a cle
 - 📱 Modern user frontend (Vue3 + TypeScript)
 - 🐳 Ready-to-use Docker deployment solution
 - 🎯 Optimized system architecture for better maintainability
+- 🧩 [mihomo (Clash.Meta)](https://github.com/MetaCubeX/mihomo) is the only proxy kernel; subscriptions are emitted as Clash/mihomo YAML. See [docs/en/kernel](docs/en/kernel/README.md)
 
 ## 🚀 Quick Start
 

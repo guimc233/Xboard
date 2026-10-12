@@ -7,13 +7,16 @@ import type { Group, Machine, MachineBinding, MachineBindingState, NodeRecord, R
 import { Badge, Button, Card, EmptyState, ErrorState, Field, Input, LoadingTable, Modal, PageHeader, Select, Switch, Textarea, useToast } from '../components/ui'
 import { NetworkSettingsEditor } from '../components/NetworkSettingsEditor'
 import { NodeRoutingConfigurationModal } from '../components/NodeRoutingConfigurationModal'
+import { MihomoInboundEditor } from '../components/MihomoInboundEditor'
+import { MIHOMO_INBOUNDS, mihomoInboundMeta } from '../lib/mihomo'
 
-const protocols = ['vless', 'vmess', 'trojan', 'shadowsocks', 'hysteria', 'tuic', 'anytls', 'socks', 'naive', 'http', 'mieru']
+const protocols = MIHOMO_INBOUNDS.map((inbound) => inbound.type)
+const protocolLabel = (type: string) => mihomoInboundMeta(type)?.label || type.toUpperCase()
 const transportOptions = ['tcp', 'ws', 'grpc', 'h2', 'kcp', 'httpupgrade', 'xhttp']
 const shadowsocksCiphers = [
   '2022-blake3-aes-128-gcm', '2022-blake3-aes-256-gcm', '2022-blake3-chacha20-poly1305',
-  'aes-128-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'xchacha20-ietf-poly1305',
-  'aes-128-cfb', 'aes-256-cfb', 'aes-128-ctr', 'aes-256-ctr', 'rc4-md5', 'none',
+  'aes-128-gcm', 'aes-192-gcm', 'aes-256-gcm', 'chacha20-ietf-poly1305', 'xchacha20-ietf-poly1305',
+  'none', 'dummy',
 ]
 const defaultPaddingScheme = [
   'stop=8', '0=30-30', '1=100-400',
@@ -35,13 +38,17 @@ function defaultProtocolSettings(type: string): Record<string, unknown> {
   if (type === 'vless') return { tls: 0, tls_settings: tlsSettings(), flow: '', encryption: { enabled: false, encryption: '', decryption: '' }, network: 'tcp', network_settings: {}, multiplex: multiplexSettings(), utls: { enabled: true, fingerprint: 'chrome' } }
   if (type === 'vmess') return { tls: 0, tls_settings: tlsSettings(), network: 'tcp', network_settings: {}, rules: [], multiplex: multiplexSettings(), utls: { enabled: true, fingerprint: 'chrome' } }
   if (type === 'trojan') return { tls: 1, network: 'tcp', network_settings: {}, tls_settings: tlsSettings(), multiplex: multiplexSettings(), utls: { enabled: true, fingerprint: 'chrome' } }
-  if (type === 'shadowsocks') return { cipher: 'aes-128-gcm', obfs: '', obfs_settings: { path: '', host: '' }, plugin: '', plugin_opts: '' }
-  if (type === 'hysteria') return { version: 2, bandwidth: { up: null, down: null }, obfs: { open: false, type: 'salamander', password: '' }, tls: tlsSettings(), hop_interval: null }
-  if (type === 'tuic') return { version: 5, congestion_control: 'cubic', alpn: ['h3'], udp_relay_mode: 'native', tls: tlsSettings() }
+  if (type === 'shadowsocks') return { cipher: 'aes-128-gcm', password: '', udp: true, obfs: '', obfs_settings: { path: '', host: '' }, plugin: '', plugin_opts: '' }
+  if (type === 'hysteria2') return { version: 2, up: null, down: null, obfs: { open: false, type: 'salamander', password: '' }, tls: tlsSettings(), hop_interval: null, bbr_profile: '' }
+  if (type === 'tuic') return { version: 5, congestion_controller: 'bbr', alpn: ['h3'], udp_relay_mode: 'native', tls: tlsSettings() }
   if (type === 'anytls') return { tls: tlsSettings(), padding_scheme: defaultPaddingScheme }
-  if (type === 'socks') return { tls: 0, tls_settings: tlsSettings() }
-  if (type === 'naive' || type === 'http') return { tls: 1, tls_settings: tlsSettings() }
+  if (type === 'socks' || type === 'mixed') return { tls: 0, udp: true, tls_settings: tlsSettings() }
+  if (type === 'http') return { tls: 1, tls_settings: tlsSettings() }
   if (type === 'mieru') return { transport: 'TCP', traffic_pattern: '', multiplex: multiplexSettings() }
+  if (type === 'snell') return { psk: '', version: 4, udp: true, obfs_opts: { mode: '', host: '' } }
+  if (type === 'sudoku') return { key: '', aead_method: 'chacha20-poly1305', table_type: 'prefer_ascii', enable_pure_downlink: false }
+  if (type === 'shadowquic') return { jls_upstream: { addr: '', sni: '', proxy: '' }, alpn: ['h3'], quic_versions: ['v1'], zero_rtt: true, congestion_controller: 'bbr', cwnd: 32 }
+  if (type === 'trusttunnel') return { network: ['tcp'], congestion_controller: '', bbr_profile: '' }
   return {}
 }
 
@@ -208,10 +215,12 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
   }, [draft.protocolSettings])
   const realitySettings = (parsedProtocolSettings.reality_settings || {}) as Record<string, any>
   const protocolTLSMode = Number(parsedProtocolSettings.tls ?? (draft.type === 'trojan' ? 1 : 0))
-  const supportsTLSCertificate = ['vless', 'vmess', 'trojan', 'hysteria', 'tuic', 'anytls', 'socks', 'naive', 'http'].includes(draft.type)
-  const usesTLSCertificate = ['hysteria', 'tuic', 'anytls'].includes(draft.type)
-    || (['vless', 'vmess', 'trojan', 'socks', 'naive', 'http'].includes(draft.type) && protocolTLSMode === 1)
-  const requiresTLSCertificate = ['hysteria', 'tuic', 'anytls'].includes(draft.type)
+  const inboundMeta = mihomoInboundMeta(draft.type)
+  const supportsTLSCertificate = Boolean(inboundMeta && inboundMeta.tls !== 'none')
+  // tls === 2 on vmess/vless/trojan means REALITY, which replaces the certificate.
+  const usesTLSCertificate = inboundMeta?.tls === 'required'
+    || (inboundMeta?.tls === 'optional' && protocolTLSMode === 1)
+  const requiresTLSCertificate = inboundMeta?.tls === 'required'
     || (draft.type === 'trojan' && protocolTLSMode !== 2)
   const outboundError = useMemo(() => jsonArrayError(draft.customOutbounds), [draft.customOutbounds])
   const routeError = useMemo(() => jsonArrayError(draft.customRoutes), [draft.customRoutes])
@@ -454,7 +463,7 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
               <Select value={draft.type} onChange={(event) => {
                 const type = event.target.value
                 setDraft({ ...draft, type, parentId: '', protocolSettings: JSON.stringify(defaultProtocolSettings(type), null, 2) })
-              }}>{protocols.map((protocol) => <option value={protocol} key={protocol}>{protocol.toUpperCase()}</option>)}</Select>
+              }}>{protocols.map((protocol) => <option value={protocol} key={protocol}>{protocolLabel(protocol)}</option>)}</Select>
             </Field>
             <Field label="连接地址" required><Input value={draft.host} onChange={(event) => setDraft({ ...draft, host: event.target.value })} placeholder="node.example.com" required /></Field>
             <Field label="自定义 node_id" hint="可留空使用数据库 ID；原 node_id 模式和 machine 模式可并存。"><Input value={draft.code} onChange={(event) => setDraft({ ...draft, code: event.target.value })} placeholder="留空自动使用节点 ID" /></Field>
@@ -548,7 +557,7 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
           </div>
           <div className="callout callout-info routing-preset-callout">
             <Sparkles size={17} />
-            <div><strong>Google → WARP {googleWarpConfigured ? '已配置' : '预设'}</strong><p>将 Google 域名流量送到本机 SOCKS <code>127.0.0.1:1080</code>。需先在节点服务器启动 WARP SOCKS；xbnode 会为 Xray 使用 geosite，并在 sing-box 下转换为 Google 域名后缀。</p></div>
+            <div><strong>Google → WARP {googleWarpConfigured ? '已配置' : '预设'}</strong><p>将 Google 域名流量送到本机 SOCKS <code>127.0.0.1:1080</code>。需先在节点服务器启动 WARP SOCKS；mihomo 会用 RULE-SET 或 GEOSITE 匹配这些域名。</p></div>
             <Button variant="secondary" size="small" onClick={applyGoogleWarpPreset}>{googleWarpConfigured ? '重新应用' : '应用预设'}</Button>
           </div>
           <div className="binding-list">
@@ -607,7 +616,7 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
             {draft.type === 'vless' && Number(protocolValue('tls', 0)) !== 2 ? <Field label="流控"><Select value={String(protocolValue('flow'))} onChange={(event) => updateProtocolValue('flow', event.target.value)}><option value="">无</option><option value="xtls-rprx-vision">XTLS Vision</option></Select></Field> : null}
             {draft.type === 'vless' ? <div className="form-grid">
               <div style={{ display: 'flex', alignItems: 'end', paddingBottom: 8 }}><Switch checked={Boolean(protocolValue('encryption.enabled', false))} onChange={(value) => updateProtocolPath('encryption.enabled', value)} label="VLESS Encryption" /></div>
-              {protocolValue('encryption.enabled', false) ? <><Field label="客户端 encryption"><Input className="mono" value={String(protocolValue('encryption.encryption'))} onChange={(event) => updateProtocolPath('encryption.encryption', event.target.value)} placeholder="由 xray vlessenc 生成" /></Field><Field label="服务端 decryption"><Input className="mono" value={String(protocolValue('encryption.decryption'))} onChange={(event) => updateProtocolPath('encryption.decryption', event.target.value)} placeholder="由 xray vlessenc 生成" /></Field></> : null}
+              {protocolValue('encryption.enabled', false) ? <><Field label="客户端 encryption" hint="mihomo vless 客户端未使用该字段，留空即可"><Input className="mono" value={String(protocolValue('encryption.encryption'))} onChange={(event) => updateProtocolPath('encryption.encryption', event.target.value)} placeholder="可留空" /></Field><Field label="服务端 decryption" hint="写入 mihomo vless listener 的 decryption"><Input className="mono" value={String(protocolValue('encryption.decryption'))} onChange={(event) => updateProtocolPath('encryption.decryption', event.target.value)} placeholder="服务端下发的 decryption 值" /></Field></> : null}
             </div> : null}
 
             <div className="form-grid">
@@ -618,19 +627,21 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
 
           {draft.type === 'shadowsocks' ? <div className="form-grid">
             <Field label="加密算法" required><Input list="shadowsocks-ciphers" value={String(protocolValue('cipher', 'aes-128-gcm'))} onChange={(event) => updateProtocolValue('cipher', event.target.value)} /><datalist id="shadowsocks-ciphers">{shadowsocksCiphers.map((cipher) => <option value={cipher} key={cipher} />)}</datalist></Field>
-            <Field label="插件"><Select value={String(protocolValue('plugin'))} onChange={(event) => updateProtocolValue('plugin', event.target.value)}><option value="">无</option><option value="obfs-local">simple-obfs</option><option value="v2ray-plugin">v2ray-plugin</option><option value="xray-plugin">xray-plugin</option><option value="gost-plugin">gost-plugin</option><option value="shadow-tls">shadow-tls</option><option value="restls">restls</option><option value="kcptun">kcptun</option></Select></Field>
+            <Field label="共享密码 (PSK)" hint="mihomo 的 Shadowsocks 仅支持单一密码；留空自动由节点创建时间派生"><Input className="mono" value={String(protocolValue('password'))} onChange={(event) => updateProtocolValue('password', event.target.value)} placeholder="留空自动生成" /></Field>
+            <Field label="插件" hint="仅列出 mihomo shadowsocks listener 原生支持的混淆"><Select value={String(protocolValue('plugin'))} onChange={(event) => updateProtocolValue('plugin', event.target.value)}><option value="">无</option><option value="obfs-local">simple-obfs</option><option value="shadow-tls">shadow-tls</option><option value="restls">restls</option><option value="jls">jls</option><option value="kcptun">kcptun</option></Select></Field>
             <Field label="插件选项" hint="key=value;key2=value2"><Input value={String(protocolValue('plugin_opts'))} onChange={(event) => updateProtocolValue('plugin_opts', event.target.value)} placeholder="例如 mode=websocket;host=example.com" /></Field>
             <Field label="混淆"><Select value={String(protocolValue('obfs'))} onChange={(event) => updateProtocolValue('obfs', event.target.value)}><option value="">无</option><option value="http">HTTP</option></Select></Field>
             {protocolValue('obfs') === 'http' ? <><Field label="混淆 Host"><Input value={String(protocolValue('obfs_settings.host'))} onChange={(event) => updateProtocolPath('obfs_settings.host', event.target.value)} /></Field><Field label="混淆 Path"><Input value={String(protocolValue('obfs_settings.path'))} onChange={(event) => updateProtocolPath('obfs_settings.path', event.target.value)} /></Field></> : null}
           </div> : null}
 
-          {draft.type === 'hysteria' ? <>
+          {draft.type === 'hysteria2' ? <>
             <div className="form-grid">
-              <Field label="协议版本" required><Select value={String(protocolValue('version', 2))} onChange={(event) => updateProtocolValue('version', Number(event.target.value))}><option value="1">Hysteria 1</option><option value="2">Hysteria 2</option></Select></Field>
               <Field label="服务器名称指示 (SNI)"><Input value={String(protocolValue('tls.server_name'))} onChange={(event) => updateProtocolPath('tls.server_name', event.target.value)} /></Field>
-              <Field label="上行带宽 (Mbps)"><Input type="number" min="0" value={String(protocolValue('bandwidth.up', ''))} onChange={(event) => updateProtocolPath('bandwidth.up', optionalNumber(event.target.value))} placeholder="留空使用 BBR" /></Field>
-              <Field label="下行带宽 (Mbps)"><Input type="number" min="0" value={String(protocolValue('bandwidth.down', ''))} onChange={(event) => updateProtocolPath('bandwidth.down', optionalNumber(event.target.value))} placeholder="留空使用 BBR" /></Field>
-              <Field label="端口跳跃间隔"><Input type="number" min="0" value={String(protocolValue('hop_interval', ''))} onChange={(event) => updateProtocolValue('hop_interval', optionalNumber(event.target.value))} /></Field>
+              <Field label="上行带宽 (Mbps)" hint="留空使用 BBR"><Input type="number" min="0" value={String(protocolValue('up', ''))} onChange={(event) => updateProtocolValue('up', optionalNumber(event.target.value))} placeholder="留空使用 BBR" /></Field>
+              <Field label="下行带宽 (Mbps)" hint="留空使用 BBR"><Input type="number" min="0" value={String(protocolValue('down', ''))} onChange={(event) => updateProtocolValue('down', optionalNumber(event.target.value))} placeholder="留空使用 BBR" /></Field>
+              <Field label="端口跳跃间隔" hint="设置端口范围后生效"><Input type="number" min="0" value={String(protocolValue('hop_interval', ''))} onChange={(event) => updateProtocolValue('hop_interval', optionalNumber(event.target.value))} /></Field>
+              <Field label="Masquerade 伪装站点" hint="file:///path 或 https://host:port"><Input className="mono" value={String(protocolValue('masquerade'))} onChange={(event) => updateProtocolValue('masquerade', event.target.value)} /></Field>
+              <Field label="BBR Profile"><Select value={String(protocolValue('bbr_profile'))} onChange={(event) => updateProtocolValue('bbr_profile', event.target.value)}><option value="">默认</option><option value="standard">standard</option><option value="conservative">conservative</option><option value="aggressive">aggressive</option></Select></Field>
               <div style={{ display: 'flex', gap: 20, alignItems: 'end', paddingBottom: 8 }}><Switch checked={Boolean(protocolValue('tls.allow_insecure', false))} onChange={(value) => updateProtocolPath('tls.allow_insecure', value)} label="允许不安全连接" /><Switch checked={Boolean(protocolValue('obfs.open', false))} onChange={(value) => updateProtocolPath('obfs.open', value)} label="启用混淆" /></div>
               {protocolValue('obfs.open', false) ? <><Field label="混淆实现"><Select value={String(protocolValue('obfs.type', 'salamander'))} onChange={(event) => updateProtocolPath('obfs.type', event.target.value)}><option value="salamander">Salamander</option></Select></Field><Field label="混淆密码"><Input type="password" value={String(protocolValue('obfs.password'))} onChange={(event) => updateProtocolPath('obfs.password', event.target.value)} /></Field></> : null}
             </div>
@@ -651,8 +662,9 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
             <Field className="span-2" label="填充方案" hint="每行一条规则；留空可使用核心默认值。"><Textarea value={(protocolValue('padding_scheme', defaultPaddingScheme) as string[]).join('\n')} onChange={(event) => updateProtocolValue('padding_scheme', event.target.value.split('\n').map((value) => value.trim()).filter(Boolean))} /></Field>
           </div> : null}
 
-          {['socks', 'naive', 'http'].includes(draft.type) ? <div className="form-grid">
-            <Field label="TLS"><Select value={String(protocolValue('tls', draft.type === 'socks' ? 0 : 1))} onChange={(event) => updateProtocolValue('tls', Number(event.target.value))}><option value="0">不启用</option><option value="1">启用</option></Select></Field>
+          {['socks', 'mixed', 'http'].includes(draft.type) ? <div className="form-grid">
+            <Field label="TLS"><Select value={String(protocolValue('tls', draft.type === 'http' ? 1 : 0))} onChange={(event) => updateProtocolValue('tls', Number(event.target.value))}><option value="0">不启用</option><option value="1">启用</option></Select></Field>
+            {['socks', 'mixed'].includes(draft.type) ? <div style={{ display: 'flex', alignItems: 'end', paddingBottom: 8 }}><Switch checked={Boolean(protocolValue('udp', true))} onChange={(value) => updateProtocolValue('udp', value)} label="监听 UDP" /></div> : null}
             {Number(protocolValue('tls', 0)) === 1 ? <><Field label="服务器名称指示 (SNI)"><Input value={String(protocolValue('tls_settings.server_name'))} onChange={(event) => updateProtocolPath('tls_settings.server_name', event.target.value)} /></Field><div style={{ display: 'flex', alignItems: 'end', paddingBottom: 8 }}><Switch checked={Boolean(protocolValue('tls_settings.allow_insecure', false))} onChange={(value) => updateProtocolPath('tls_settings.allow_insecure', value)} label="允许不安全连接" /></div></> : null}
           </div> : null}
 
@@ -660,6 +672,11 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
             <Field label="传输协议"><Select value={String(protocolValue('transport', 'TCP'))} onChange={(event) => updateProtocolValue('transport', event.target.value)}><option value="TCP">TCP</option><option value="UDP">UDP</option></Select></Field>
             <Field label="流量模式 (Base64)"><Input className="mono" value={String(protocolValue('traffic_pattern'))} onChange={(event) => updateProtocolValue('traffic_pattern', event.target.value)} /></Field>
           </div> : null}
+
+          <div className="advanced-options">
+            <p className="field-hint">{inboundMeta?.description}</p>
+            <MihomoInboundEditor type={draft.type} settings={parsedProtocolSettings} onChange={updateProtocolPath} />
+          </div>
 
           {['vless', 'vmess', 'trojan', 'mieru'].includes(draft.type) ? <div className="advanced-options">
             <div className="form-grid">
@@ -690,7 +707,7 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
           </div>
           <div className="callout">
             <RouteIcon size={17} />
-            <div><strong>双核心原生 JSON</strong><p>Outbound 支持 Shadowsocks、SOCKS5 及核心可识别的其他协议；Route 的字段结构按 Xray / Sing-box 原配置填写。保存前只校验 JSON 和数组结构，运行时由 xbnode 按当前核心校验。</p></div>
+            <div><strong>mihomo 原生 JSON</strong><p>Outbound 支持 Shadowsocks、SOCKS5 及 mihomo 可识别的其他协议；Route 的字段结构按 mihomo 原配置填写。保存前只校验 JSON 和数组结构，运行时由 xbnode 按 mihomo 校验。</p></div>
           </div>
           <div className="tabs" role="tablist" aria-label="自定义路由配置">
             <button type="button" role="tab" aria-selected={routingTab === 'outbounds'} className={`tab ${routingTab === 'outbounds' ? 'is-active' : ''}`} onClick={() => setRoutingTab('outbounds')}><Braces size={14} />自定义 Outbounds</button>
@@ -812,7 +829,7 @@ export function NodesPage() {
             <Button size="small" loading={savingSort} onClick={() => void saveSorting()}><Save size={14} />保存排序</Button>
           </> : <>
             <div className="search-field" style={{ position: 'relative' }}><Search size={15} style={{ position: 'absolute', left: 11, top: 11, color: 'var(--muted-foreground)' }} /><Input style={{ paddingLeft: 34 }} value={search} onChange={(event) => setSearch(event.target.value)} placeholder="搜索节点名称、地址、ID…" /></div>
-            <Select style={{ width: 170 }} value={protocol} onChange={(event) => setProtocol(event.target.value)}><option value="all">全部协议</option>{protocols.map((item) => <option value={item} key={item}>{item.toUpperCase()}</option>)}</Select>
+            <Select style={{ width: 170 }} value={protocol} onChange={(event) => setProtocol(event.target.value)}><option value="all">全部协议</option>{protocols.map((item) => <option value={item} key={item}>{protocolLabel(item)}</option>)}</Select>
             <Select style={{ width: 140 }} value={status} onChange={(event) => setStatus(event.target.value as typeof status)}><option value="enabled">仅看启用</option><option value="all">全部节点</option><option value="disabled">仅看停用</option></Select>
             <Badge tone="info">{filtered.length} 个节点</Badge>
             <Button variant="secondary" size="small" disabled={!nodes.length} onClick={startSorting}><ListOrdered size={14} />编辑排序</Button>

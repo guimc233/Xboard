@@ -1,10 +1,12 @@
 {
     "name": "xboard/xboard",
     "type": "project",
-    "description": "xboard is a proxy protocol manage.",
+    "description": "xboard is a mihomo (Clash.Meta) proxy panel.",
     "keywords": [
         "xboard",
-        "v2ray",
+        "mihomo",
+        "clash",
+        "clash-meta",
         "shadowsocks",
         "trojan",
         "laravel"

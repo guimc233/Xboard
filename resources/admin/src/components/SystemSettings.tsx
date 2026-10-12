@@ -119,10 +119,9 @@ function SettingsForm({ section, initial, onSaved }: { section: SettingsTab; ini
 
 function TemplateSettings({ initial, onSaved }: { initial: ConfigSection; onSaved: () => void }) {
   const templates = [
-    ['singbox', 'Sing-box', 'JSON'], ['clash', 'Clash', 'YAML'], ['clashmeta', 'Clash Meta', 'YAML'],
-    ['stash', 'Stash', 'YAML'], ['surge', 'Surge', 'INI'], ['surfboard', 'Surfboard', 'INI'],
+    ['clashmeta', 'Clash Meta (mihomo)', 'YAML'],
   ] as const
-  const [active, setActive] = useState<(typeof templates)[number][0]>('singbox')
+  const [active, setActive] = useState<(typeof templates)[number][0]>('clashmeta')
   const [draft, setDraft] = useState<ConfigSection>({ ...initial })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')

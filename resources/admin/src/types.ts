@@ -151,20 +151,20 @@ export interface RuleSetTemplate {
   name: string
   tag: string
   settings: {
-    singbox: {
-      type: 'remote' | 'local'
-      format: 'binary' | 'source'
+    mihomo: {
+      type: 'http' | 'file' | 'inline'
+      behavior: 'domain' | 'ipcidr' | 'classical'
+      format?: 'yaml' | 'text' | 'mrs' | null
       url?: string | null
       path?: string | null
-      download_detour?: string | null
-      update_interval?: string | null
+      interval?: string | null
+      proxy?: string | null
+      size_limit?: number | null
+      header?: Record<string, string[]> | null
+      payload?: string[] | null
     }
-    xray: {
-      type: 'geosite' | 'geoip' | 'ext-domain' | 'ext-ip'
-      tag: string
-      url?: string | null
-      file_name?: string | null
-    }
+    /** Original sing-box / Xray source kept for reference after conversion. */
+    legacy?: Record<string, unknown> | null
   }
   enabled: boolean
   updated_at?: string

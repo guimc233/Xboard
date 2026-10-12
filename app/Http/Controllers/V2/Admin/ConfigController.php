@@ -195,15 +195,9 @@ class ConfigController extends Controller
                 'recaptcha_enable' => (bool) admin_setting('captcha_enable', 0)
             ],
             'subscribe_template' => [
-                'subscribe_template_singbox' => $this->formatTemplateContent(
-                    subscribe_template('singbox') ?? '',
-                    'json'
-                ),
-                'subscribe_template_clash' => subscribe_template('clash') ?? '',
+                // mihomo is the only kernel, so there is exactly one profile
+                // template: the Clash/mihomo YAML document.
                 'subscribe_template_clashmeta' => subscribe_template('clashmeta') ?? '',
-                'subscribe_template_stash' => subscribe_template('stash') ?? '',
-                'subscribe_template_surge' => subscribe_template('surge') ?? '',
-                'subscribe_template_surfboard' => subscribe_template('surfboard') ?? ''
             ]
         ];
     }
@@ -213,12 +207,7 @@ class ConfigController extends Controller
         $data = $request->validated();
 
         $templateKeys = [
-            'subscribe_template_singbox' => 'singbox',
-            'subscribe_template_clash' => 'clash',
             'subscribe_template_clashmeta' => 'clashmeta',
-            'subscribe_template_stash' => 'stash',
-            'subscribe_template_surge' => 'surge',
-            'subscribe_template_surfboard' => 'surfboard',
         ];
 
         foreach ($data as $k => $v) {
@@ -243,31 +232,6 @@ class ConfigController extends Controller
      * @param string $format 输出格式 (json|string)
      * @return string 格式化后的内容
      */
-    private function formatTemplateContent(mixed $content, string $format = 'string'): string
-    {
-        return match ($format) {
-            'json' => match (true) {
-                    is_array($content) => json_encode(
-                        value: $content,
-                        flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                    ),
-
-                    is_string($content) && str($content)->isJson() => rescue(
-                        callback: fn() => json_encode(
-                            value: json_decode($content, associative: true, flags: JSON_THROW_ON_ERROR),
-                            flags: JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                        ),
-                        rescue: $content,
-                        report: false
-                    ),
-
-                    default => str($content)->toString()
-                },
-
-            default => str($content)->toString()
-        };
-    }
-
     private function getTelegramWebhookBaseUrl(): ?string
     {
         $customUrl = trim((string) admin_setting('telegram_webhook_url', ''));

@@ -24,6 +24,44 @@ use Illuminate\Support\Str;
  */
 class ServerMachine extends Model
 {
+    /**
+     * The only proxy kernel this panel drives. Agents built for the retired
+     * Xray / sing-box generations still report their old names; those are
+     * folded into the canonical mihomo value so stored state stays uniform.
+     */
+    public const KERNEL_MIHOMO = 'mihomo';
+
+    /**
+     * Legacy kernel names reported by pre-mihomo agents.
+     */
+    public const KERNEL_ALIASES = [
+        'xray' => self::KERNEL_MIHOMO,
+        'singbox' => self::KERNEL_MIHOMO,
+        'sing-box' => self::KERNEL_MIHOMO,
+        'sing_box' => self::KERNEL_MIHOMO,
+        'clash' => self::KERNEL_MIHOMO,
+        'clashmeta' => self::KERNEL_MIHOMO,
+        'clash-meta' => self::KERNEL_MIHOMO,
+        'clash.meta' => self::KERNEL_MIHOMO,
+        'meta' => self::KERNEL_MIHOMO,
+    ];
+
+    public static function normalizeKernelType(?string $type): ?string
+    {
+        if ($type === null || trim($type) === '') {
+            return null;
+        }
+
+        $normalized = strtolower(trim($type));
+
+        return self::KERNEL_ALIASES[$normalized] ?? $normalized;
+    }
+
+    public static function isValidKernelType(?string $type): bool
+    {
+        return self::normalizeKernelType($type) === self::KERNEL_MIHOMO;
+    }
+
     protected $table = 'v2_server_machine';
 
     protected $guarded = ['id'];

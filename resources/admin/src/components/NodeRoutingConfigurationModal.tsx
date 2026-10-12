@@ -70,7 +70,7 @@ export function NodeRoutingConfigurationModal({ node, routing, onClose, onSaved 
     <Modal open onClose={onClose} width="large" title={`配置多出口 · ${node.name}`} description={`节点 #${node.id} 共用一个入站端口 ${node.server_port}；每个出口档案使用独立${credentialName}选择出口。当前配置版本 ${request.data?.config_version ?? '--'}。`} footer={<><Button variant="secondary" onClick={onClose}>取消</Button><Button loading={saving} onClick={() => void save()}>保存并下发</Button></>}>
       {request.error ? <ErrorState error={request.error} retry={() => void request.mutate()} /> : !request.data ? <LoadingTable rows={6} columns={2} /> : <div className="form-section">
         {error ? <div className="login-error" role="alert">{error}</div> : null}
-        <div className="callout callout-info"><Waypoints size={17} /><div><strong>一个入口，多个出口</strong><p>用户仍连接 {node.host}:{node.port}。订阅为每个档案生成不同的{credentialName}；xbnode 鉴权后按认证身份映射到指定 outbound。Xray 与 sing-box 使用同一份面板配置。</p></div></div>
+        <div className="callout callout-info"><Waypoints size={17} /><div><strong>一个入口，多个出口</strong><p>用户仍连接 {node.host}:{node.port}。订阅为每个档案生成不同的{credentialName}；xbnode 鉴权后按认证身份映射到指定 outbound。mihomo 使用同一份面板配置。</p></div></div>
 
         <div className="form-section">
           <h3 className="section-heading">第一步：绑定 Outbound</h3>

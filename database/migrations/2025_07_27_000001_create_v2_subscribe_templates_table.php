@@ -27,33 +27,13 @@ return new class extends Migration
 
     private function seedDefaults(): void
     {
-        // Fallback order matches original protocol class behavior
+        // Only the mihomo (Clash.Meta) profile is served now; the panel exports
+        // every subscription as a Clash/mihomo YAML document.
         $protocols = [
-            'singbox' => [
-                'resources/rules/custom.sing-box.json',
-                'resources/rules/default.sing-box.json',
-            ],
-            'clash' => [
-                'resources/rules/custom.clash.yaml',
-                'resources/rules/default.clash.yaml',
-            ],
             'clashmeta' => [
                 'resources/rules/custom.clashmeta.yaml',
                 'resources/rules/custom.clash.yaml',
                 'resources/rules/default.clash.yaml',
-            ],
-            'stash' => [
-                'resources/rules/custom.stash.yaml',
-                'resources/rules/custom.clash.yaml',
-                'resources/rules/default.clash.yaml',
-            ],
-            'surge' => [
-                'resources/rules/custom.surge.conf',
-                'resources/rules/default.surge.conf',
-            ],
-            'surfboard' => [
-                'resources/rules/custom.surfboard.conf',
-                'resources/rules/default.surfboard.conf',
             ],
         ];
 

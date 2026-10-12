@@ -1,9 +1,9 @@
 import type { Group, Machine, NodeRecord, Paginated, RoutingData, UserRecord } from '../types'
 
 const machines: Machine[] = [
-  { id: 1, name: 'DE-Hetzner-01', notes: 'Falkenstein · 主力', is_active: true, last_seen_at: Date.now() - 24_000, load_status: { cpu: 18, memory: 42 }, agent_version: '0.9.4', kernel_type: 'sing-box', agent_instance_id: 'f3b9a210-demo', servers_count: 2 },
-  { id: 2, name: 'DE-Hetzner-02', notes: 'Nuremberg · DNS 均衡', is_active: true, last_seen_at: Date.now() - 55_000, load_status: { cpu: 26, memory: 37 }, agent_version: '0.9.4', kernel_type: 'xray', agent_instance_id: 'a82cd411-demo', servers_count: 2 },
-  { id: 3, name: 'HK-HKT-01', notes: '香港出口', is_active: true, last_seen_at: Date.now() - 780_000, load_status: { cpu: 71, memory: 63 }, agent_version: '0.9.3', kernel_type: 'sing-box', agent_instance_id: 'e109bd72-demo', servers_count: 1 },
+  { id: 1, name: 'DE-Hetzner-01', notes: 'Falkenstein · 主力', is_active: true, last_seen_at: Date.now() - 24_000, load_status: { cpu: 18, memory: 42 }, agent_version: '0.9.4', kernel_type: 'mihomo', agent_instance_id: 'f3b9a210-demo', servers_count: 2 },
+  { id: 2, name: 'DE-Hetzner-02', notes: 'Nuremberg · DNS 均衡', is_active: true, last_seen_at: Date.now() - 55_000, load_status: { cpu: 26, memory: 37 }, agent_version: '0.9.4', kernel_type: 'mihomo', agent_instance_id: 'a82cd411-demo', servers_count: 2 },
+  { id: 3, name: 'HK-HKT-01', notes: '香港出口', is_active: true, last_seen_at: Date.now() - 780_000, load_status: { cpu: 71, memory: 63 }, agent_version: '0.9.3', kernel_type: 'mihomo', agent_instance_id: 'e109bd72-demo', servers_count: 1 },
 ]
 
 const nodes: NodeRecord[] = [
@@ -19,7 +19,7 @@ const routing: RoutingData = {
     { id: 2, uuid: 'f2de3713-8474-4e25-a01b-3bb12579d189', name: 'Internal SOCKS5', protocol: 'socks5', settings: { server: '10.10.0.8', server_port: 1080, username: 'xboard', password: '********' }, enabled: true },
   ],
   rule_sets: [
-    { id: 1, uuid: 'd7ba9307-2775-441f-8fe3-5f60d9d7c5c8', name: 'AI 非中国区', tag: 'ai-non-cn', enabled: true, settings: { singbox: { type: 'remote', format: 'binary', url: 'https://example.com/rules/ai-non-cn.srs', update_interval: '1d' }, xray: { type: 'geosite', tag: 'category-ai-!cn' } } },
+    { id: 1, uuid: 'd7ba9307-2775-441f-8fe3-5f60d9d7c5c8', name: 'AI 非中国区', tag: 'ai-non-cn', enabled: true, settings: { mihomo: { type: 'http', behavior: 'classical', format: 'yaml', url: 'https://example.com/rules/ai-non-cn.yaml', interval: '1d' } } },
   ],
   routes: [
     { id: 1, uuid: '9dd1110b-f63c-4b28-a8d4-6571c9003991', name: 'Streaming via HK', enabled: true, rules: routeRules() },

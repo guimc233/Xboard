@@ -7,6 +7,7 @@ use App\Services\ServerService;
 use App\Services\TrafficAttributionService;
 use App\Services\DeviceStateService;
 use App\Services\ReportIngestionService;
+use App\Models\ServerMachine;
 use App\Models\ServerMachineBinding;
 use App\WebSocket\NodeWorker;
 use Illuminate\Http\Request;
@@ -99,7 +100,9 @@ class ServerController extends Controller
                 $capabilities = $request->input('capabilities');
                 $machine->forceFill([
                     'agent_version' => $request->input('agent_version', $machine->agent_version),
-                    'kernel_type' => $request->input('kernel_type', $machine->kernel_type),
+                    'kernel_type' => $request->filled('kernel_type')
+                        ? ServerMachine::normalizeKernelType((string) $request->input('kernel_type'))
+                        : $machine->kernel_type,
                     'capabilities' => is_array($capabilities) ? $capabilities : $machine->capabilities,
                     'agent_instance_id' => $instanceId !== 'legacy' ? $instanceId : $machine->agent_instance_id,
                     'last_seen_at' => time(),

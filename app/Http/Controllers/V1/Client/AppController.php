@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\V1\Client;
 
 use App\Http\Controllers\Controller;
+use App\Protocols\ClashMeta;
 use App\Services\ServerService;
 use App\Services\UserService;
 use Illuminate\Http\Request;
@@ -30,26 +31,12 @@ class AppController extends Controller
         $proxies = [];
 
         foreach ($servers as $item) {
-            $protocol_settings = $item['protocol_settings'];
-            if ($item['type'] === 'shadowsocks'
-                && in_array(data_get($protocol_settings, 'cipher'), [
-                    'aes-128-gcm',
-                    'aes-192-gcm',
-                    'aes-256-gcm',
-                    'chacha20-ietf-poly1305'
-                ])
-            ) {
-                array_push($proxy, \App\Protocols\Clash::buildShadowsocks($user['uuid'], $item));
-                array_push($proxies, $item['name']);
+            $entry = ClashMeta::buildProxy((string) $item['password'], $item);
+            if ($entry === null) {
+                continue;
             }
-            if ($item['type'] === 'vmess') {
-                array_push($proxy, \App\Protocols\Clash::buildVmess($user['uuid'], $item));
-                array_push($proxies, $item['name']);
-            }
-            if ($item['type'] === 'trojan') {
-                array_push($proxy, \App\Protocols\Clash::buildTrojan($user['uuid'], $item));
-                array_push($proxies, $item['name']);
-            }
+            array_push($proxy, $entry);
+            array_push($proxies, $item['name']);
         }
 
         $config['proxies'] = array_merge($config['proxies'] ? $config['proxies'] : [], $proxy);

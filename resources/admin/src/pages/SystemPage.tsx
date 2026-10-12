@@ -66,7 +66,7 @@ export function SystemPage() {
               <div className="info-row"><span>用户访问模型</span><span>权限组直接授权</span></div>
               <div className="info-row"><span>节点接入</span><span>node_id + machine</span></div>
               <div className="info-row"><span>多后端设备统计</span><span>来源快照并集</span></div>
-              <div className="info-row"><span>代理核心</span><span>Xray + sing-box</span></div>
+              <div className="info-row"><span>代理核心</span><span>mihomo (Clash.Meta)</span></div>
             </div>
           </Card>
           <Card>

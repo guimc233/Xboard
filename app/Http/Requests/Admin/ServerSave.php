@@ -25,6 +25,14 @@ class ServerSave extends FormRequest
         'multiplex.brutal.down_mbps' => 'nullable|integer',
     ];
 
+    /** mihomo `mux-option` block shared by ss/vmess/vless/trojan/sudoku/tuic/hysteria2. */
+    private const MUX_OPTION_RULES = [
+        'mux_option.padding' => 'nullable|boolean',
+        'mux_option.brutal.enabled' => 'nullable|boolean',
+        'mux_option.brutal.up' => 'nullable|integer',
+        'mux_option.brutal.down' => 'nullable|integer',
+    ];
+
     private const ECH_RULES = [
         'enabled' => 'nullable|boolean',
         'config' => 'nullable|string',
@@ -41,12 +49,64 @@ class ServerSave extends FormRequest
         'reality_settings.short_id' => 'nullable|string',
     ];
 
+    /** Optional override of the server-side mihomo `reality-config` block. */
+    private const REALITY_SERVER_RULES = [
+        'reality_config.enabled' => 'nullable|boolean',
+        'reality_config.dest' => 'nullable|string|max:255',
+        'reality_config.private_key' => 'nullable|string',
+        'reality_config.short_id' => 'nullable|array',
+        'reality_config.short_id.*' => 'nullable|string',
+        'reality_config.server_names' => 'nullable|array',
+        'reality_config.server_names.*' => 'nullable|string',
+        'reality_config.max_time_difference' => 'nullable|integer',
+        'reality_config.proxy' => 'nullable|string|max:64',
+    ];
+
+    /**
+     * Listener-root options every TLS-capable inbound can carry, plus the raw
+     * mihomo listener override. Unknown `protocol_settings` keys are preserved
+     * by the Server model, so this list only types the modelled fields.
+     */
+    private const LISTENER_TLS_RULES = [
+        'client_auth_type' => 'nullable|string|max:32',
+        'client_auth_cert' => 'nullable|string',
+        'ech_key' => 'nullable|string',
+        'sniff' => 'nullable|boolean',
+        'sniff_override' => 'nullable|boolean',
+        'listener' => 'nullable|array',
+    ];
+
+    private const TLS_SETTINGS_RULES = [
+        'tls_settings.server_name' => 'nullable|string',
+        'tls_settings.allow_insecure' => 'nullable|boolean',
+        'tls_settings.ech' => 'nullable|array',
+        'tls_settings.ech.enabled' => 'nullable|boolean',
+        'tls_settings.ech.config' => 'nullable|string',
+        'tls_settings.ech.query_server_name' => 'nullable|string',
+        'tls_settings.ech.key' => 'nullable|string',
+    ];
+
+    private const TLS_OBJECT_RULES = [
+        'tls' => 'nullable|array',
+        'tls.server_name' => 'nullable|string',
+        'tls.allow_insecure' => 'nullable|boolean',
+        'tls.ech' => 'nullable|array',
+        'tls.ech.enabled' => 'nullable|boolean',
+        'tls.ech.config' => 'nullable|string',
+        'tls.ech.query_server_name' => 'nullable|string',
+        'tls.ech.key' => 'nullable|string',
+    ];
+
     private const PROTOCOL_RULES = [
         'shadowsocks' => [
             'cipher' => 'required|string',
+            'password' => 'nullable|string|max:255',
+            'udp' => 'nullable|boolean',
             'obfs' => 'nullable|string',
             'obfs_settings.path' => 'nullable|string',
             'obfs_settings.host' => 'nullable|string',
+            'simple_obfs.enable' => 'nullable|boolean',
+            'simple_obfs.mode' => 'nullable|string|in:http,tls',
             'plugin' => 'nullable|string',
             'plugin_opts' => 'nullable|string',
         ],
@@ -55,23 +115,6 @@ class ServerSave extends FormRequest
             'network' => 'required|string',
             'network_settings' => 'nullable|array',
             'rules' => 'nullable|array',
-        ],
-        'trojan' => [
-            'tls' => 'nullable|integer',
-            'network' => 'required|string',
-            'network_settings' => 'nullable|array',
-            'server_name' => 'nullable|string',
-            'allow_insecure' => 'nullable|boolean',
-        ],
-        'hysteria' => [
-            'version' => 'required|integer',
-            'alpn' => 'nullable|string',
-            'obfs.open' => 'nullable|boolean',
-            'obfs.type' => 'string|nullable',
-            'obfs.password' => 'string|nullable',
-            'bandwidth.up' => 'nullable|integer',
-            'bandwidth.down' => 'nullable|integer',
-            'hop_interval' => 'integer|nullable',
         ],
         'vless' => [
             'tls' => 'required|integer',
@@ -83,24 +126,105 @@ class ServerSave extends FormRequest
             'encryption.encryption' => 'nullable|string',
             'encryption.decryption' => 'nullable|string',
         ],
-        'socks' => [
+        'trojan' => [
             'tls' => 'nullable|integer',
-        ],
-        'naive' => [
-            'tls' => 'required|integer',
+            'network' => 'required|string',
+            'network_settings' => 'nullable|array',
+            'server_name' => 'nullable|string',
+            'allow_insecure' => 'nullable|boolean',
+            'ss_option.enabled' => 'nullable|boolean',
+            'ss_option.method' => 'nullable|string|in:aes-128-gcm,aes-256-gcm,chacha20-ietf-poly1305',
+            'ss_option.password' => 'nullable|string',
         ],
         'http' => [
-            'tls' => 'required|integer',
+            'tls' => 'nullable|integer',
         ],
-        'tuic' => [
-            'version' => 'nullable|integer',
-            'congestion_control' => 'nullable|string',
-            'alpn' => 'nullable|array',
-            'udp_relay_mode' => 'nullable|string',
+        'socks' => [
+            'tls' => 'nullable|integer',
+            'udp' => 'nullable|boolean',
+        ],
+        'mixed' => [
+            'tls' => 'nullable|integer',
+            'udp' => 'nullable|boolean',
+        ],
+        'snell' => [
+            'psk' => 'required|string|max:255',
+            'version' => 'nullable|integer|in:1,2,3,4,5',
+            'udp' => 'nullable|boolean',
+            'obfs_opts.mode' => 'nullable|string|in:http,tls',
+            'obfs_opts.host' => 'nullable|string|max:255',
         ],
         'mieru' => [
             'transport' => 'required|string|in:TCP,UDP',
-            'traffic_pattern' => 'string',
+            'traffic_pattern' => 'nullable|string',
+            'user_hint_is_mandatory' => 'nullable|boolean',
+        ],
+        'sudoku' => [
+            'key' => 'required|string|max:255',
+            'aead_method' => 'nullable|string|in:chacha20-poly1305,aes-128-gcm,none',
+            'padding_min' => 'nullable|integer|min:0',
+            'padding_max' => 'nullable|integer|min:0',
+            'table_type' => 'nullable|string|in:prefer_ascii,prefer_entropy,up_ascii_down_entropy,up_entropy_down_ascii',
+            'custom_table' => 'nullable|string',
+            'custom_tables' => 'nullable|array',
+            'handshake_timeout' => 'nullable|integer|min:0',
+            'enable_pure_downlink' => 'nullable|boolean',
+            'httpmask.disable' => 'nullable|boolean',
+            'httpmask.mode' => 'nullable|string|in:legacy,stream,poll,auto,ws',
+            'httpmask.path_root' => 'nullable|string|max:255',
+        ],
+        'tuic' => [
+            'version' => 'nullable|integer|in:4,5',
+            'congestion_controller' => 'nullable|string|in:cubic,new_reno,bbr',
+            'congestion_control' => 'nullable|string|in:cubic,new_reno,bbr',
+            'alpn' => 'nullable|array',
+            'alpn.*' => 'nullable|string',
+            'udp_relay_mode' => 'nullable|string|in:native,quic',
+            'max_idle_time' => 'nullable|integer|min:0',
+            'authentication_timeout' => 'nullable|integer|min:0',
+            'max_udp_relay_packet_size' => 'nullable|integer|min:0',
+            'bbr_profile' => 'nullable|string|in:standard,conservative,aggressive',
+        ],
+        'hysteria2' => [
+            'version' => 'nullable|integer',
+            'up' => 'nullable|integer|min:0',
+            'down' => 'nullable|integer|min:0',
+            'bandwidth.up' => 'nullable|integer|min:0',
+            'bandwidth.down' => 'nullable|integer|min:0',
+            'ignore_client_bandwidth' => 'nullable|boolean',
+            'obfs.open' => 'nullable|boolean',
+            'obfs.type' => 'nullable|string|in:salamander',
+            'obfs.password' => 'nullable|string',
+            'obfs_password' => 'nullable|string',
+            'masquerade' => 'nullable|string|max:2048',
+            'bbr_profile' => 'nullable|string|in:standard,conservative,aggressive',
+            'hop_interval' => 'nullable|integer|min:0',
+        ],
+        'shadowquic' => [
+            'jls_upstream.addr' => 'nullable|string|max:255',
+            'jls_upstream.sni' => 'nullable|string|max:255',
+            'jls_upstream.proxy' => 'nullable|string|max:64',
+            'jls_upstream.rate_limit' => 'nullable|integer|min:0',
+            'alpn' => 'nullable|array',
+            'alpn.*' => 'nullable|string',
+            'quic_versions' => 'nullable|array',
+            'quic_versions.*' => 'nullable|string|in:v1,v2',
+            'zero_rtt' => 'nullable|boolean',
+            'congestion_controller' => 'nullable|string|in:cubic,new_reno,bbr',
+            'up' => 'nullable|integer|min:0',
+            'down' => 'nullable|integer|min:0',
+            'ignore_client_bandwidth' => 'nullable|boolean',
+            'cwnd' => 'nullable|integer|min:1',
+            'bbr_profile' => 'nullable|string|in:standard,conservative,aggressive',
+            'max_idle_time' => 'nullable|integer|min:0',
+            'max_datagram_frame_size' => 'nullable|integer|min:0',
+            'disable_mtu_discovery' => 'nullable|boolean',
+        ],
+        'trusttunnel' => [
+            'network' => 'nullable|array',
+            'network.*' => 'nullable|string|in:tcp,udp',
+            'congestion_controller' => 'nullable|string|in:cubic,new_reno,bbr',
+            'bbr_profile' => 'nullable|string|in:standard,conservative,aggressive',
         ],
         'anytls' => [
             'tls' => 'nullable|array',
@@ -160,91 +284,103 @@ class ServerSave extends FormRequest
 
     private function getProtocolRules(string $type): array
     {
+        $type = Server::normalizeType($type) ?? $type;
         $rules = self::PROTOCOL_RULES[$type] ?? [];
 
         return match ($type) {
             'vmess' => array_merge(
                 $rules,
-                $this->buildTlsSettingsRules(),
-                self::MULTIPLEX_RULES,
-                self::UTLS_RULES,
-            ),
-            'trojan' => array_merge(
-                $rules,
-                $this->buildTlsSettingsRules(includeRoot: true),
+                self::TLS_SETTINGS_RULES,
                 self::REALITY_RULES,
+                self::REALITY_SERVER_RULES,
                 self::MULTIPLEX_RULES,
+                self::MUX_OPTION_RULES,
                 self::UTLS_RULES,
-            ),
-            'hysteria' => array_merge(
-                $rules,
-                $this->buildTlsObjectRules(),
-            ),
-            'tuic' => array_merge(
-                $rules,
-                $this->buildTlsObjectRules(),
-            ),
-            'mieru' => array_merge(
-                $rules,
-                self::MULTIPLEX_RULES,
+                self::LISTENER_TLS_RULES,
             ),
             'vless' => array_merge(
                 $rules,
-                $this->buildTlsSettingsRules(),
+                self::TLS_SETTINGS_RULES,
                 self::REALITY_RULES,
+                self::REALITY_SERVER_RULES,
                 self::MULTIPLEX_RULES,
+                self::MUX_OPTION_RULES,
                 self::UTLS_RULES,
+                self::LISTENER_TLS_RULES,
             ),
-            'socks', 'naive', 'http' => array_merge(
+            'trojan' => array_merge(
                 $rules,
-                $this->buildTlsSettingsRules(includeRoot: $type !== 'socks'),
+                self::TLS_SETTINGS_RULES,
+                self::REALITY_RULES,
+                self::REALITY_SERVER_RULES,
+                self::MULTIPLEX_RULES,
+                self::MUX_OPTION_RULES,
+                self::UTLS_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'shadowsocks' => array_merge(
+                $rules,
+                self::MUX_OPTION_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'http', 'socks', 'mixed' => array_merge(
+                $rules,
+                self::TLS_SETTINGS_RULES,
+                self::LISTENER_TLS_RULES,
             ),
             'anytls' => array_merge(
                 $rules,
-                $this->buildTlsObjectRules(includeRoot: true),
+                self::TLS_OBJECT_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'tuic' => array_merge(
+                $rules,
+                self::TLS_OBJECT_RULES,
+                self::MUX_OPTION_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'hysteria2' => array_merge(
+                $rules,
+                self::TLS_OBJECT_RULES,
+                self::MUX_OPTION_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'mieru', 'sudoku' => array_merge(
+                $rules,
+                self::MULTIPLEX_RULES,
+                self::MUX_OPTION_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'shadowquic' => array_merge(
+                $rules,
+                self::MUX_OPTION_RULES,
+                self::LISTENER_TLS_RULES,
+            ),
+            'trusttunnel', 'snell' => array_merge(
+                $rules,
+                self::LISTENER_TLS_RULES,
             ),
             default => $rules,
         };
     }
 
-    private function buildTlsSettingsRules(bool $includeRoot = false): array
+    /**
+     * Fold legacy kernel-specific type names into the canonical mihomo inbound
+     * before validation, so editing an old row saves the new value.
+     */
+    protected function prepareForValidation(): void
     {
-        return array_merge(
-            $includeRoot ? ['tls_settings' => 'nullable|array'] : [],
-            [
-                'tls_settings.server_name' => 'nullable|string',
-                'tls_settings.allow_insecure' => 'nullable|boolean',
-                'tls_settings.ech' => 'nullable|array',
-            ],
-            $this->prefixRules('tls_settings.ech.', self::ECH_RULES),
-        );
-    }
-
-    private function buildTlsObjectRules(bool $includeRoot = false): array
-    {
-        return array_merge(
-            $includeRoot ? ['tls' => 'nullable|array'] : [],
-            [
-                'tls.server_name' => 'nullable|string',
-                'tls.allow_insecure' => 'nullable|boolean',
-                'tls.ech' => 'nullable|array',
-            ],
-            $this->prefixRules('tls.ech.', self::ECH_RULES),
-        );
-    }
-
-    private function prefixRules(string $prefix, array $rules): array
-    {
-        $result = [];
-        foreach ($rules as $field => $rule) {
-            $result[$prefix . $field] = $rule;
+        if ($this->has('type')) {
+            $normalized = Server::normalizeType((string) $this->input('type'));
+            if ($normalized !== null) {
+                $this->merge(['type' => $normalized]);
+            }
         }
-        return $result;
     }
 
     public function rules(): array
     {
-        $type = $this->input('type');
+        $type = (string) $this->input('type');
         $rules = $this->getBaseRules();
         $protocolRules = $this->getProtocolRules($type);
 
@@ -266,8 +402,13 @@ class ServerSave extends FormRequest
             'protocol_settings.transport' => '传输方式',
             'protocol_settings.version' => '协议版本',
             'protocol_settings.password' => '密码',
-            'protocol_settings.handshake.server' => '握手服务器',
-            'protocol_settings.handshake.server_port' => '握手端口',
+            'protocol_settings.psk' => 'Snell PSK',
+            'protocol_settings.key' => 'Sudoku 密钥',
+            'protocol_settings.token' => 'Realm Token',
+            'protocol_settings.up' => '上行带宽',
+            'protocol_settings.down' => '下行带宽',
+            'protocol_settings.masquerade' => '伪装站点',
+            'protocol_settings.target' => '转发目标',
             'protocol_settings.multiplex.enabled' => '多路复用',
             'protocol_settings.multiplex.protocol' => '复用协议',
             'protocol_settings.multiplex.max_connections' => '最大连接数',
@@ -277,6 +418,7 @@ class ServerSave extends FormRequest
             'protocol_settings.multiplex.brutal.enabled' => 'Brutal加速',
             'protocol_settings.multiplex.brutal.up_mbps' => 'Brutal上行速率',
             'protocol_settings.multiplex.brutal.down_mbps' => 'Brutal下行速率',
+            'protocol_settings.mux_option.padding' => 'mihomo 多路复用填充',
             'protocol_settings.utls.enabled' => 'uTLS',
             'protocol_settings.utls.fingerprint' => 'uTLS指纹',
             'protocol_settings.tls_settings.ech.enabled' => 'ECH',
@@ -287,6 +429,9 @@ class ServerSave extends FormRequest
             'protocol_settings.tls.ech.config' => 'ECH配置',
             'protocol_settings.tls.ech.query_server_name' => 'ECH查询域名',
             'protocol_settings.tls.ech.key' => 'ECH密钥',
+            'protocol_settings.client_auth_type' => 'mTLS 客户端验证',
+            'protocol_settings.client_auth_cert' => 'mTLS CA 证书',
+            'protocol_settings.ech_key' => 'ECH 密钥',
         ];
     }
 

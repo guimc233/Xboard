@@ -4,7 +4,7 @@ namespace App\Http\Controllers\V1\Client;
 
 use App\Http\Controllers\Controller;
 use App\Models\Server;
-use App\Protocols\General;
+use App\Protocols\ClashMeta;
 use App\Services\Plugin\HookManager;
 use App\Services\ServerService;
 use App\Services\UserService;
@@ -17,17 +17,22 @@ class ClientController extends Controller
      * Protocol prefix mapping for server names
      */
     private const PROTOCOL_PREFIXES = [
-        'hysteria' => [
-            1 => '[Hy]',
-            2 => '[Hy2]'
-        ],
+        'hysteria' => '[Hy2]',
+        'hysteria2' => '[Hy2]',
         'vless' => '[vless]',
         'shadowsocks' => '[ss]',
         'vmess' => '[vmess]',
         'trojan' => '[trojan]',
         'tuic' => '[tuic]',
         'socks' => '[socks]',
-        'anytls' => '[anytls]'
+        'mixed' => '[mixed]',
+        'http' => '[http]',
+        'anytls' => '[anytls]',
+        'snell' => '[snell]',
+        'mieru' => '[mieru]',
+        'sudoku' => '[sudoku]',
+        'shadowquic' => '[shadowquic]',
+        'trusttunnel' => '[trusttunnel]',
     ];
 
 
@@ -63,8 +68,10 @@ class ClientController extends Controller
         $requestedTypes = $this->parseRequestedTypes($request->input('types'));
         $filterKeywords = $this->parseFilterKeywords($request->input('filter'));
 
+        // mihomo is the only supported kernel, so every subscription — whatever
+        // client or flag requested it — is served as a Clash/mihomo profile.
         $protocolClassName = app('protocols.manager')->matchProtocolClassName($clientInfo['flag'])
-            ?? General::class;
+            ?? ClashMeta::class;
 
         $serversFiltered = $this->filterServers(
             servers: $servers,

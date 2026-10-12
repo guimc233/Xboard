@@ -62,17 +62,30 @@ use App\Services\ChildIdentityService;
  */
 class Server extends Model
 {
-    public const TYPE_HYSTERIA = 'hysteria';
+    // mihomo listener (inbound) types. The legacy Xray/sing-box-only names are
+    // kept as constants so older code and migrations still resolve, but only
+    // the values listed in VALID_TYPES are accepted for new nodes.
+    public const TYPE_HTTP = 'http';
+    public const TYPE_SOCKS = 'socks';
+    public const TYPE_MIXED = 'mixed';
+    public const TYPE_SHADOWSOCKS = 'shadowsocks';
+    public const TYPE_VMESS = 'vmess';
     public const TYPE_VLESS = 'vless';
     public const TYPE_TROJAN = 'trojan';
-    public const TYPE_VMESS = 'vmess';
-    public const TYPE_TUIC = 'tuic';
-    public const TYPE_SHADOWSOCKS = 'shadowsocks';
     public const TYPE_ANYTLS = 'anytls';
-    public const TYPE_SOCKS = 'socks';
-    public const TYPE_NAIVE = 'naive';
-    public const TYPE_HTTP = 'http';
+    public const TYPE_SNELL = 'snell';
     public const TYPE_MIERU = 'mieru';
+    public const TYPE_SUDOKU = 'sudoku';
+    public const TYPE_TUIC = 'tuic';
+    public const TYPE_HYSTERIA2 = 'hysteria2';
+    public const TYPE_SHADOWQUIC = 'shadowquic';
+    public const TYPE_TRUSTTUNNEL = 'trusttunnel';
+
+    /** @deprecated Retired: mihomo serves Hysteria 2 only. */
+    public const TYPE_HYSTERIA = 'hysteria';
+    /** @deprecated Retired: NaiveProxy is not a mihomo inbound. */
+    public const TYPE_NAIVE = 'naive';
+
     public const STATUS_OFFLINE = 0;
     public const STATUS_ONLINE_NO_PUSH = 1;
     public const STATUS_ONLINE = 2;
@@ -94,23 +107,53 @@ class Server extends Model
         ]
     ];
 
-    public const TYPE_ALIASES = [
-        'v2ray' => self::TYPE_VMESS,
-        'hysteria2' => self::TYPE_HYSTERIA,
-    ];
+    /**
+     * Legacy spellings folded into the canonical mihomo type.
+     * @see \App\Support\Mihomo::ALIASES
+     */
+    public const TYPE_ALIASES = \App\Support\Mihomo::ALIASES;
 
+    /**
+     * Every server type the panel accepts: the mihomo listener set.
+     */
     public const VALID_TYPES = [
-        self::TYPE_HYSTERIA,
+        self::TYPE_HTTP,
+        self::TYPE_SOCKS,
+        self::TYPE_MIXED,
+        self::TYPE_SHADOWSOCKS,
+        self::TYPE_VMESS,
         self::TYPE_VLESS,
         self::TYPE_TROJAN,
-        self::TYPE_VMESS,
-        self::TYPE_TUIC,
-        self::TYPE_SHADOWSOCKS,
         self::TYPE_ANYTLS,
-        self::TYPE_SOCKS,
-        self::TYPE_NAIVE,
-        self::TYPE_HTTP,
+        self::TYPE_SNELL,
         self::TYPE_MIERU,
+        self::TYPE_SUDOKU,
+        self::TYPE_TUIC,
+        self::TYPE_HYSTERIA2,
+        self::TYPE_SHADOWQUIC,
+        self::TYPE_TRUSTTUNNEL,
+    ];
+
+    /**
+     * Server types that can be rendered as a client proxy in a subscription.
+     * Every accepted type is subscription-capable, so this mirrors VALID_TYPES.
+     */
+    public const SUBSCRIPTION_TYPES = [
+        self::TYPE_HTTP,
+        self::TYPE_SOCKS,
+        self::TYPE_MIXED,
+        self::TYPE_SHADOWSOCKS,
+        self::TYPE_VMESS,
+        self::TYPE_VLESS,
+        self::TYPE_TROJAN,
+        self::TYPE_ANYTLS,
+        self::TYPE_SNELL,
+        self::TYPE_MIERU,
+        self::TYPE_SUDOKU,
+        self::TYPE_TUIC,
+        self::TYPE_HYSTERIA2,
+        self::TYPE_SHADOWQUIC,
+        self::TYPE_TRUSTTUNNEL,
     ];
 
     protected $table = 'v2_server';
@@ -217,26 +260,131 @@ class Server extends Model
         ]
     ];
 
+    /**
+     * Listener-root TLS options shared by every TLS-capable inbound. The
+     * certificate and key themselves arrive through the node cert_config.
+     */
+    private const LISTENER_TLS_OPTIONS = [
+        'client_auth_type' => ['type' => 'string', 'default' => null],
+        'client_auth_cert' => ['type' => 'string', 'default' => null],
+        'ech_key' => ['type' => 'string', 'default' => null],
+    ];
+
+    /**
+     * Optional override for the mihomo `reality-config` block. When empty the
+     * builder derives dest/private-key/short-id/server-names from
+     * `reality_settings`, which is what the admin UI edits.
+     */
+    private const REALITY_SERVER_CONFIGURATION = [
+        'reality_config' => [
+            'type' => 'object',
+            'default' => null,
+            'fields' => [
+                'enabled' => ['type' => 'boolean', 'default' => false],
+                'dest' => ['type' => 'string', 'default' => null],
+                'private_key' => ['type' => 'string', 'default' => null],
+                'short_id' => ['type' => 'array', 'default' => []],
+                'server_names' => ['type' => 'array', 'default' => []],
+                'max_time_difference' => ['type' => 'integer', 'default' => null],
+                'proxy' => ['type' => 'string', 'default' => null],
+            ],
+        ],
+    ];
+
+    /** mihomo `mux-option` block. */
+    private const MUX_OPTION_CONFIGURATION = [
+        'mux_option' => [
+            'type' => 'object',
+            'default' => null,
+            'fields' => [
+                'padding' => ['type' => 'boolean', 'default' => false],
+                'brutal' => [
+                    'type' => 'object',
+                    'default' => null,
+                    'fields' => [
+                        'enabled' => ['type' => 'boolean', 'default' => false],
+                        'up' => ['type' => 'integer', 'default' => null],
+                        'down' => ['type' => 'integer', 'default' => null],
+                    ],
+                ],
+            ],
+        ],
+    ];
+
+    /** Per-listener sniffing (rendered into a listener `rule`, see docs). */
+    private const SNIFF_CONFIGURATION = [
+        'sniff' => ['type' => 'boolean', 'default' => false],
+        'sniff_override' => ['type' => 'boolean', 'default' => false],
+    ];
+
+    /**
+     * Escape hatch: raw mihomo listener keys that are merged last, verbatim.
+     * This is how every remaining documented (or newly added) mihomo inbound
+     * option stays reachable without a panel release.
+     */
+    private const LISTENER_OVERRIDE_CONFIGURATION = [
+        'listener' => ['type' => 'array', 'default' => null],
+    ];
+
     private const PROTOCOL_CONFIGURATIONS = [
-        self::TYPE_TROJAN => [
-            'tls' => ['type' => 'integer', 'default' => 1],
-            'network' => ['type' => 'string', 'default' => null],
-            'network_settings' => ['type' => 'array', 'default' => null],
-            'server_name' => ['type' => 'string', 'default' => null],
-            'allow_insecure' => ['type' => 'boolean', 'default' => false],
+        self::TYPE_HTTP => [
+            'tls' => ['type' => 'integer', 'default' => 0],
             'tls_settings' => self::TLS_SETTINGS_CONFIGURATION,
-            ...self::REALITY_CONFIGURATION,
-            ...self::MULTIPLEX_CONFIGURATION,
-            ...self::UTLS_CONFIGURATION
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_SOCKS => [
+            'tls' => ['type' => 'integer', 'default' => 0],
+            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION,
+            'udp' => ['type' => 'boolean', 'default' => true],
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_MIXED => [
+            'tls' => ['type' => 'integer', 'default' => 0],
+            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION,
+            'udp' => ['type' => 'boolean', 'default' => true],
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_SHADOWSOCKS => [
+            'cipher' => ['type' => 'string', 'default' => null],
+            // mihomo authenticates the inbound with a single shared secret.
+            'password' => ['type' => 'string', 'default' => null],
+            'udp' => ['type' => 'boolean', 'default' => true],
+            'obfs' => ['type' => 'string', 'default' => null],
+            'obfs_settings' => ['type' => 'array', 'default' => null],
+            'simple_obfs' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'enable' => ['type' => 'boolean', 'default' => false],
+                    'mode' => ['type' => 'string', 'default' => 'http'],
+                ],
+            ],
+            'plugin' => ['type' => 'string', 'default' => null],
+            'plugin_opts' => ['type' => 'string', 'default' => null],
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
         self::TYPE_VMESS => [
             'tls' => ['type' => 'integer', 'default' => 0],
             'network' => ['type' => 'string', 'default' => null],
-            'rules' => ['type' => 'array', 'default' => null],
             'network_settings' => ['type' => 'array', 'default' => null],
+            'rules' => ['type' => 'array', 'default' => null],
             'tls_settings' => self::TLS_SETTINGS_CONFIGURATION,
+            ...self::REALITY_CONFIGURATION,
+            ...self::REALITY_SERVER_CONFIGURATION,
             ...self::MULTIPLEX_CONFIGURATION,
-            ...self::UTLS_CONFIGURATION
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::UTLS_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
         self::TYPE_VLESS => [
             'tls' => ['type' => 'integer', 'default' => 0],
@@ -254,42 +402,38 @@ class Server extends Model
             'network' => ['type' => 'string', 'default' => null],
             'network_settings' => ['type' => 'array', 'default' => null],
             ...self::REALITY_CONFIGURATION,
+            ...self::REALITY_SERVER_CONFIGURATION,
             ...self::MULTIPLEX_CONFIGURATION,
-            ...self::UTLS_CONFIGURATION
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::UTLS_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
-        self::TYPE_SHADOWSOCKS => [
-            'cipher' => ['type' => 'string', 'default' => null],
-            'obfs' => ['type' => 'string', 'default' => null],
-            'obfs_settings' => ['type' => 'array', 'default' => null],
-            'plugin' => ['type' => 'string', 'default' => null],
-            'plugin_opts' => ['type' => 'string', 'default' => null]
-        ],
-        self::TYPE_HYSTERIA => [
-            'version' => ['type' => 'integer', 'default' => 2],
-            'bandwidth' => [
+        self::TYPE_TROJAN => [
+            'tls' => ['type' => 'integer', 'default' => 1],
+            'network' => ['type' => 'string', 'default' => null],
+            'network_settings' => ['type' => 'array', 'default' => null],
+            'server_name' => ['type' => 'string', 'default' => null],
+            'allow_insecure' => ['type' => 'boolean', 'default' => false],
+            'ss_option' => [
                 'type' => 'object',
+                'default' => null,
                 'fields' => [
-                    'up' => ['type' => 'integer', 'default' => null],
-                    'down' => ['type' => 'integer', 'default' => null]
-                ]
+                    'enabled' => ['type' => 'boolean', 'default' => false],
+                    'method' => ['type' => 'string', 'default' => 'aes-128-gcm'],
+                    'password' => ['type' => 'string', 'default' => null],
+                ],
             ],
-            'obfs' => [
-                'type' => 'object',
-                'fields' => [
-                    'open' => ['type' => 'boolean', 'default' => false],
-                    'type' => ['type' => 'string', 'default' => 'salamander'],
-                    'password' => ['type' => 'string', 'default' => null]
-                ]
-            ],
-            'tls' => self::TLS_CONFIGURATION,
-            'hop_interval' => ['type' => 'integer', 'default' => null]
-        ],
-        self::TYPE_TUIC => [
-            'version' => ['type' => 'integer', 'default' => 5],
-            'congestion_control' => ['type' => 'string', 'default' => 'cubic'],
-            'alpn' => ['type' => 'array', 'default' => ['h3']],
-            'udp_relay_mode' => ['type' => 'string', 'default' => 'native'],
-            'tls' => self::TLS_CONFIGURATION
+            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION,
+            ...self::REALITY_CONFIGURATION,
+            ...self::REALITY_SERVER_CONFIGURATION,
+            ...self::MULTIPLEX_CONFIGURATION,
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::UTLS_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
         self::TYPE_ANYTLS => [
             'padding_scheme' => [
@@ -306,25 +450,134 @@ class Server extends Model
                     "7=500-1000"
                 ]
             ],
-            'tls' => self::TLS_CONFIGURATION
+            'tls' => self::TLS_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::SNIFF_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
-        self::TYPE_SOCKS => [
-            'tls' => ['type' => 'integer', 'default' => 0],
-            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION
-        ],
-        self::TYPE_NAIVE => [
-            'tls' => ['type' => 'integer', 'default' => 0],
-            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION
-        ],
-        self::TYPE_HTTP => [
-            'tls' => ['type' => 'integer', 'default' => 0],
-            'tls_settings' => self::TLS_SETTINGS_CONFIGURATION
+        self::TYPE_SNELL => [
+            'psk' => ['type' => 'string', 'default' => null],
+            'version' => ['type' => 'integer', 'default' => 4],
+            'udp' => ['type' => 'boolean', 'default' => true],
+            'obfs_opts' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'mode' => ['type' => 'string', 'default' => 'http'],
+                    'host' => ['type' => 'string', 'default' => null],
+                ],
+            ],
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
         ],
         self::TYPE_MIERU => [
             'transport' => ['type' => 'string', 'default' => 'TCP'],
             'traffic_pattern' => ['type' => 'string', 'default' => ''],
+            'user_hint_is_mandatory' => ['type' => 'boolean', 'default' => false],
             ...self::MULTIPLEX_CONFIGURATION,
-        ]
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_SUDOKU => [
+            'key' => ['type' => 'string', 'default' => null],
+            'aead_method' => ['type' => 'string', 'default' => 'chacha20-poly1305'],
+            'padding_min' => ['type' => 'integer', 'default' => null],
+            'padding_max' => ['type' => 'integer', 'default' => null],
+            'table_type' => ['type' => 'string', 'default' => 'prefer_ascii'],
+            'custom_table' => ['type' => 'string', 'default' => null],
+            'custom_tables' => ['type' => 'array', 'default' => null],
+            'handshake_timeout' => ['type' => 'integer', 'default' => null],
+            'enable_pure_downlink' => ['type' => 'boolean', 'default' => false],
+            'httpmask' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'disable' => ['type' => 'boolean', 'default' => false],
+                    'mode' => ['type' => 'string', 'default' => 'legacy'],
+                    'path_root' => ['type' => 'string', 'default' => null],
+                ],
+            ],
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_TUIC => [
+            'version' => ['type' => 'integer', 'default' => 5],
+            'congestion_controller' => ['type' => 'string', 'default' => 'bbr'],
+            'congestion_control' => ['type' => 'string', 'default' => null],
+            'alpn' => ['type' => 'array', 'default' => ['h3']],
+            'udp_relay_mode' => ['type' => 'string', 'default' => 'native'],
+            'max_idle_time' => ['type' => 'integer', 'default' => 15000],
+            'authentication_timeout' => ['type' => 'integer', 'default' => 1000],
+            'max_udp_relay_packet_size' => ['type' => 'integer', 'default' => 1500],
+            'bbr_profile' => ['type' => 'string', 'default' => null],
+            'tls' => self::TLS_CONFIGURATION,
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_HYSTERIA2 => [
+            'version' => ['type' => 'integer', 'default' => 2],
+            'up' => ['type' => 'integer', 'default' => null],
+            'down' => ['type' => 'integer', 'default' => null],
+            'bandwidth' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'up' => ['type' => 'integer', 'default' => null],
+                    'down' => ['type' => 'integer', 'default' => null]
+                ]
+            ],
+            'ignore_client_bandwidth' => ['type' => 'boolean', 'default' => false],
+            'obfs' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'open' => ['type' => 'boolean', 'default' => false],
+                    'type' => ['type' => 'string', 'default' => 'salamander'],
+                    'password' => ['type' => 'string', 'default' => null]
+                ]
+            ],
+            'obfs_password' => ['type' => 'string', 'default' => null],
+            'masquerade' => ['type' => 'string', 'default' => null],
+            'bbr_profile' => ['type' => 'string', 'default' => null],
+            'hop_interval' => ['type' => 'integer', 'default' => null],
+            'tls' => self::TLS_CONFIGURATION,
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_SHADOWQUIC => [
+            'jls_upstream' => [
+                'type' => 'object',
+                'default' => null,
+                'fields' => [
+                    'addr' => ['type' => 'string', 'default' => null],
+                    'sni' => ['type' => 'string', 'default' => null],
+                    'proxy' => ['type' => 'string', 'default' => null],
+                    'rate_limit' => ['type' => 'integer', 'default' => null],
+                ],
+            ],
+            'alpn' => ['type' => 'array', 'default' => ['h3']],
+            'quic_versions' => ['type' => 'array', 'default' => null],
+            'zero_rtt' => ['type' => 'boolean', 'default' => true],
+            'congestion_controller' => ['type' => 'string', 'default' => 'bbr'],
+            'up' => ['type' => 'integer', 'default' => null],
+            'down' => ['type' => 'integer', 'default' => null],
+            'ignore_client_bandwidth' => ['type' => 'boolean', 'default' => false],
+            'cwnd' => ['type' => 'integer', 'default' => 32],
+            'bbr_profile' => ['type' => 'string', 'default' => null],
+            'max_idle_time' => ['type' => 'integer', 'default' => 30000],
+            'max_datagram_frame_size' => ['type' => 'integer', 'default' => 1400],
+            'disable_mtu_discovery' => ['type' => 'boolean', 'default' => false],
+            ...self::MUX_OPTION_CONFIGURATION,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
+        self::TYPE_TRUSTTUNNEL => [
+            'network' => ['type' => 'array', 'default' => ['tcp']],
+            'congestion_controller' => ['type' => 'string', 'default' => null],
+            'bbr_profile' => ['type' => 'string', 'default' => null],
+            ...self::LISTENER_TLS_OPTIONS,
+            ...self::LISTENER_OVERRIDE_CONFIGURATION,
+        ],
     ];
 
     private function castValueWithConfig($value, array $config)
@@ -347,7 +600,10 @@ class Server extends Model
 
     private function castSettingsWithConfig(array $settings, array $configs): array
     {
-        $result = [];
+        // Start from the raw payload so that mihomo listener keys the panel does
+        // not model yet (and forward-compatible future options) survive a
+        // round-trip instead of being silently dropped by the caster.
+        $result = $settings;
         foreach ($configs as $key => $config) {
             $value = $settings[$key] ?? null;
             $result[$key] = $this->castValueWithConfig($value, $config);
@@ -358,7 +614,7 @@ class Server extends Model
     public function getProtocolSettingsAttribute($value)
     {
         $settings = json_decode($value, true) ?? [];
-        $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
+        $configs = self::PROTOCOL_CONFIGURATIONS[self::normalizeType($this->type) ?? ''] ?? [];
         return $this->castSettingsWithConfig($settings, $configs);
     }
 
@@ -368,7 +624,7 @@ class Server extends Model
             $value = json_decode($value, true);
         }
 
-        $configs = self::PROTOCOL_CONFIGURATIONS[$this->type] ?? [];
+        $configs = self::PROTOCOL_CONFIGURATIONS[self::normalizeType($this->type) ?? ''] ?? [];
         $castedSettings = $this->castSettingsWithConfig($value ?? [], $configs);
 
         $this->attributes['protocol_settings'] = json_encode($castedSettings);
@@ -406,12 +662,30 @@ class Server extends Model
 
     public static function normalizeType(?string $type): string | null
     {
-        return $type ? strtolower(self::TYPE_ALIASES[$type] ?? $type) : null;
+        return \App\Support\Mihomo::normalizeType($type);
     }
-    
+
     public static function isValidType(?string $type): bool
     {
-        return $type ? in_array(self::normalizeType($type), self::VALID_TYPES, true) : true;
+        return $type === null || $type === '' ? true : \App\Support\Mihomo::isValidType($type);
+    }
+
+    /**
+     * The `type:` string mihomo expects for this node's inbound.
+     */
+    public function getListenerTypeAttribute(): ?string
+    {
+        return \App\Support\Mihomo::listenerType($this->type);
+    }
+
+    public function isSubscriptionType(): bool
+    {
+        return \App\Support\Mihomo::isSubscriptionType($this->type);
+    }
+
+    public function requiresTls(): bool
+    {
+        return \App\Support\Mihomo::requiresTls($this->type);
     }
 
     public function getAvailableStatusAttribute(): int

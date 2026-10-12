@@ -57,7 +57,7 @@ class MachineController extends Controller
             'net.in_speed' => 'nullable|numeric|min:0',
             'net.out_speed' => 'nullable|numeric|min:0',
             'agent_version' => 'nullable|string|max:64',
-            'kernel_type' => 'nullable|string|in:xray,singbox',
+            'kernel_type' => 'nullable|string|max:32',
             'capabilities' => 'nullable|array',
             'agent_instance_id' => 'nullable|uuid',
         ]);
@@ -96,7 +96,9 @@ class MachineController extends Controller
             'load_status' => $loadStatus,
             'last_seen_at' => $recordedAt,
             'agent_version' => $request->input('agent_version', $machine->agent_version),
-            'kernel_type' => $request->input('kernel_type', $machine->kernel_type),
+            'kernel_type' => $request->filled('kernel_type')
+                ? ServerMachine::normalizeKernelType((string) $request->input('kernel_type'))
+                : $machine->kernel_type,
             'capabilities' => $request->input('capabilities', $machine->capabilities),
             'agent_instance_id' => $request->input('agent_instance_id', $machine->agent_instance_id),
         ])->save();

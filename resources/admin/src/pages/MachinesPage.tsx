@@ -173,8 +173,11 @@ export function MachinesPage() {
             return (
               <Card className="machine-card" key={machine.id}>
                 <div className="machine-card-head">
-                  <div><h3>{machine.name}</h3><p>SID {machine.id} · {machine.notes || machine.kernel_type || '无备注'}</p></div>
-                  <Badge tone={!machine.is_active ? 'neutral' : online(machine) ? 'success' : 'danger'}>{!machine.is_active ? '已停用' : online(machine) ? '在线' : '离线'}</Badge>
+                  <div><h3>{machine.name}</h3><p>SID {machine.id} · {machine.notes || '无备注'}</p></div>
+                  <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <Badge tone="info">{machine.kernel_type || 'mihomo'}</Badge>
+                    <Badge tone={!machine.is_active ? 'neutral' : online(machine) ? 'success' : 'danger'}>{!machine.is_active ? '已停用' : online(machine) ? '在线' : '离线'}</Badge>
+                  </div>
                 </div>
                 <div className="machine-meta">
                   <div className="meta-box"><span>承载节点</span><strong>{machineNodes.length}</strong></div>

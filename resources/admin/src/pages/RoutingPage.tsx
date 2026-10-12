@@ -64,7 +64,7 @@ function OutboundModal({ outbound, onClose, onSaved }: {
   }
 
   return (
-    <Modal open onClose={onClose} width={protocol === 'vless' ? 'large' : 'medium'} title={outbound ? `编辑 ${outbound.name}` : '新建 Outbound 模板'} description="面板会将统一模板分别编译为 Xray 与 sing-box 所需的 outbound 格式。" footer={<><Button variant="secondary" onClick={onClose}>取消</Button><Button loading={saving} onClick={() => document.getElementById('outbound-submit')?.click()}>保存模板</Button></>}>
+    <Modal open onClose={onClose} width={protocol === 'vless' ? 'large' : 'medium'} title={outbound ? `编辑 ${outbound.name}` : '新建 Outbound 模板'} description="面板会将统一模板编译为 mihomo 所需的 outbound 格式。" footer={<><Button variant="secondary" onClick={onClose}>取消</Button><Button loading={saving} onClick={() => document.getElementById('outbound-submit')?.click()}>保存模板</Button></>}>
       <form className="form-section" onSubmit={submit}>
         {error ? <div className="login-error" role="alert">{error}</div> : null}
         <div className="form-grid">
@@ -151,7 +151,7 @@ function ConfigurationModal({ node, routing, onClose }: {
     <Modal open onClose={onClose} width="large" title={`配置节点路由 · ${node.name}`} description={`节点 #${node.id}，当前配置版本 ${request.data?.config_version ?? '--'}。保存后所有绑定后端都会收到同一版本配置。`} footer={<><Button variant="secondary" onClick={onClose}>取消</Button><Button loading={saving} onClick={() => void save()}>保存并下发</Button></>}>
       {request.error ? <ErrorState error={request.error} retry={() => void request.mutate()} /> : !request.data ? <LoadingTable rows={6} columns={2} /> : <div className="form-section">
         {error ? <div className="login-error" role="alert">{error}</div> : null}
-        <div className="callout callout-info"><Waypoints size={17} /><div><strong>双核心统一配置</strong><p>模板在面板中使用规范化结构；xbnode 会根据当前核心生成 Xray 或 sing-box 配置。切换核心不需要复制两份模板。</p></div></div>
+        <div className="callout callout-info"><Waypoints size={17} /><div><strong>mihomo 统一配置</strong><p>模板在面板中使用规范化结构；xbnode 生成 mihomo 的 listeners 与 rules，不再区分核心。</p></div></div>
 
         <div className="form-section">
           <h3 className="section-heading">绑定 Outbounds</h3>
@@ -224,7 +224,7 @@ export function RoutingPage() {
     <>
       <PageHeader title="出站与路由" description="先定义出口和双核心规则集，再用可视化 Route 模板组合分流条件。" actions={<><Select value="" onChange={(event) => { const node = nodes.find((item) => item.id === Number(event.target.value)); if (node) setConfigureNode(node) }} style={{ width: 210 }}><option value="" disabled>选择节点进行配置…</option>{nodes.map((node) => <option key={node.id} value={node.id}>#{node.id} {node.name}</option>)}</Select><Button onClick={createForCurrentTab}><Plus size={15} />新建 {tab === 'outbounds' ? 'Outbound' : tab === 'rule_sets' ? '规则集' : 'Route'}</Button></>} />
 
-      <div className="callout callout-info" style={{ marginBottom: 16 }}><Braces size={18} /><div><strong>规则集按核心编译</strong><p>sing-box 接收远程或本地 `rule_set`；Xray 不支持 `.srs`，会使用同一逻辑标签配置的 geosite、geoip 或 ext 选择器。后端上报核心类型，节点只加载当前核心对应来源。</p></div></div>
+      <div className="callout callout-info" style={{ marginBottom: 16 }}><Braces size={18} /><div><strong>规则集即 mihomo rule-provider</strong><p>每个规则集对应一个 mihomo `rule-providers` 条目，需选择 behavior（domain / ipcidr / classical）与 format（yaml / text / mrs）。路由规则用 RULE-SET 引用其标签。</p></div></div>
 
       <div className="tabs" role="tablist"><button type="button" role="tab" aria-selected={tab === 'outbounds'} className={`tab ${tab === 'outbounds' ? 'is-active' : ''}`} onClick={() => setTab('outbounds')}>Outbound <Badge>{routing.outbounds.length}</Badge></button><button type="button" role="tab" aria-selected={tab === 'rule_sets'} className={`tab ${tab === 'rule_sets' ? 'is-active' : ''}`} onClick={() => setTab('rule_sets')}>规则集 <Badge>{routing.rule_sets.length}</Badge></button><button type="button" role="tab" aria-selected={tab === 'routes'} className={`tab ${tab === 'routes' ? 'is-active' : ''}`} onClick={() => setTab('routes')}>Route <Badge>{routing.routes.length}</Badge></button></div>
 
@@ -236,9 +236,9 @@ export function RoutingPage() {
         </Card>)}</div> : <Card><EmptyState icon={<Waypoints size={20} />} title="没有 Outbound 模板" description="创建 Shadowsocks 或 SOCKS5 出站，再把它绑定到一个或多个节点。" action={<Button onClick={() => setOutboundEditor('new')}><Plus size={15} />新建 Outbound</Button>} /></Card>
       ) : tab === 'rule_sets' ? (routing.rule_sets.length ? <div className="template-grid">{routing.rule_sets.map((ruleSet) => <Card className="template-card" key={ruleSet.id}>
         <div className="template-card-head"><div><h3>{ruleSet.name}</h3><p className="mono">{ruleSet.tag}</p></div><Badge tone={ruleSet.enabled ? 'success' : 'neutral'}>{ruleSet.enabled ? '启用' : '停用'}</Badge></div>
-        <div className="template-meta"><div className="meta-box"><span>sing-box</span><strong>{ruleSet.settings.singbox.format.toUpperCase()}</strong></div><div className="meta-box"><span>Xray</span><strong>{ruleSet.settings.xray.type}</strong></div></div>
+        <div className="template-meta"><div className="meta-box"><span>来源</span><strong>{ruleSet.settings.mihomo.type}</strong></div><div className="meta-box"><span>行为 / 格式</span><strong>{ruleSet.settings.mihomo.behavior} · {(ruleSet.settings.mihomo.format || 'yaml')}</strong></div></div>
         <div className="template-actions"><Button variant="secondary" size="small" onClick={() => setRuleSetEditor(ruleSet)}>编辑</Button><Button variant="ghost" size="icon" onClick={() => void copyText(ruleSet.uuid).then(() => notify('规则集 UUID 已复制'))} aria-label="复制规则集 UUID"><Copy size={14} /></Button><Button variant="ghost" size="icon" onClick={() => void drop('rule_set', ruleSet)} aria-label={`删除 ${ruleSet.name}`}><Trash2 size={14} /></Button></div>
-      </Card>)}</div> : <Card><EmptyState icon={<Database size={20} />} title="没有规则集" description="创建一个逻辑规则集，同时填写 sing-box SRS 与 Xray 选择器。" action={<Button onClick={() => setRuleSetEditor('new')}><Plus size={15} />新建规则集</Button>} /></Card>
+      </Card>)}</div> : <Card><EmptyState icon={<Database size={20} />} title="没有规则集" description="创建一个 mihomo rule-provider，选择 behavior 与 format。" action={<Button onClick={() => setRuleSetEditor('new')}><Plus size={15} />新建规则集</Button>} /></Card>
       ) : routing.routes.length ? <div className="template-grid">{routing.routes.map((route) => <Card className="template-card" key={route.id}>
         <div className="template-card-head"><div><h3>{route.name}</h3><p className="mono">{route.uuid}</p></div><Badge tone={route.enabled ? 'success' : 'neutral'}>{route.enabled ? '启用' : '停用'}</Badge></div>
         <div className="template-meta"><div className="meta-box"><span>规则数量</span><strong>{route.rules.length}</strong></div><div className="meta-box"><span>动作</span><strong>{Array.from(new Set(route.rules.map((rule) => rule.action.type))).join(' / ') || '--'}</strong></div></div>
