@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-BOd4bbFG.js",
+    "file": "assets/index-DARPNfIL.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -12,7 +12,7 @@
     ]
   },
   "src/components/TrafficDashboard.tsx": {
-    "file": "assets/TrafficDashboard-xEyqogE0.js",
+    "file": "assets/TrafficDashboard-BWSBP8yu.js",
     "name": "TrafficDashboard",
     "src": "src/components/TrafficDashboard.tsx",
     "isDynamicEntry": true,

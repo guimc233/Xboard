@@ -8,11 +8,12 @@ import { LoginPage } from './pages/LoginPage'
 import { DashboardPage } from './pages/DashboardPage'
 import { NodesPage } from './pages/NodesPage'
 import { MachinesPage } from './pages/MachinesPage'
+import { GroupsPage } from './pages/GroupsPage'
 import { UsersPage } from './pages/UsersPage'
 import { RoutingPage } from './pages/RoutingPage'
 import { SystemPage } from './pages/SystemPage'
 
-const allowedPages: PageKey[] = ['dashboard', 'nodes', 'machines', 'users', 'routing', 'system']
+const allowedPages: PageKey[] = ['dashboard', 'nodes', 'machines', 'groups', 'users', 'routing', 'system']
 
 function pageFromHash(): PageKey {
   const value = window.location.hash.replace(/^#\/?/, '').split('/')[0] as PageKey
@@ -22,6 +23,7 @@ function pageFromHash(): PageKey {
 function CurrentPage({ page, setPage }: { page: PageKey; setPage: (page: PageKey) => void }) {
   if (page === 'nodes') return <NodesPage />
   if (page === 'machines') return <MachinesPage />
+  if (page === 'groups') return <GroupsPage />
   if (page === 'users') return <UsersPage />
   if (page === 'routing') return <RoutingPage />
   if (page === 'system') return <SystemPage />

@@ -498,7 +498,7 @@ function NodeModal({ node, copyFrom, nodes, machines, groups, open, onClose, onS
                   <input type="checkbox" checked={draft.groupIds.includes(group.id)} onChange={(event) => updateGroup(group.id, event.target.checked)} />
                   <span><strong>{group.name}</strong><small>{group.users_count ?? 0} 位用户</small></span>
                 </label>)}
-                {!groups.length ? <span className="field-error">尚无权限组，请先在权限组管理中创建。</span> : null}
+                {!groups.length ? <span className="field-error">尚无权限组，请先在「访问控制 → 权限组」中创建。</span> : null}
               </div>
               <span className="field-hint">只有所属权限组的用户会在订阅中收到该节点；“用户可见”并不会自动授权所有用户。</span>
             </div>

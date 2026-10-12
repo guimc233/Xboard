@@ -4,6 +4,7 @@ import {
   Boxes,
   ChevronRight,
   CircleUserRound,
+  Layers,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -18,7 +19,7 @@ import {
 import { Button } from './ui'
 import { cn } from '../lib/format'
 
-export type PageKey = 'dashboard' | 'nodes' | 'machines' | 'users' | 'routing' | 'system'
+export type PageKey = 'dashboard' | 'nodes' | 'machines' | 'groups' | 'users' | 'routing' | 'system'
 
 const navigation: Array<{ group: string; items: Array<{ key: PageKey; label: string; icon: typeof Activity }> }> = [
   { group: '概览', items: [{ key: 'dashboard', label: '仪表盘', icon: LayoutDashboard }] },
@@ -30,12 +31,18 @@ const navigation: Array<{ group: string; items: Array<{ key: PageKey; label: str
       { key: 'routing', label: '出站与路由', icon: Route },
     ],
   },
-  { group: '访问控制', items: [{ key: 'users', label: '用户授权', icon: UsersRound }] },
+  {
+    group: '访问控制',
+    items: [
+      { key: 'groups', label: '权限组', icon: Layers },
+      { key: 'users', label: '用户授权', icon: UsersRound },
+    ],
+  },
   { group: '系统', items: [{ key: 'system', label: '系统状态', icon: Settings2 }] },
 ]
 
 const pageNames: Record<PageKey, string> = {
-  dashboard: '仪表盘', nodes: '节点管理', machines: '服务器管理', users: '用户授权', routing: '出站与路由', system: '系统状态',
+  dashboard: '仪表盘', nodes: '节点管理', machines: '服务器管理', groups: '权限组', users: '用户授权', routing: '出站与路由', system: '系统状态',
 }
 
 export function Shell({ page, setPage, onLogout, children }: {

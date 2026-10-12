@@ -103,6 +103,8 @@ export interface Group {
   name: string
   users_count?: number
   server_count?: number
+  created_at?: number
+  updated_at?: number
 }
 
 export interface OutboundTemplate {
