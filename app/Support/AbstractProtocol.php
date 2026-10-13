@@ -185,7 +185,7 @@ abstract class AbstractProtocol
                         return false;
                     }
                     $requiredVersion = $allowedValues[$actualValue];
-                    if ($requiredVersion !== '0.0.0' && version_compare($this->clientVersion, $requiredVersion, '<')) {
+                    if (!$this->meetsClientVersion($requiredVersion)) {
                         return false;
                     }
                     continue;
@@ -205,12 +205,39 @@ abstract class AbstractProtocol
                 continue;
             }
             $requiredVersion = $allowedValues[$actualValue];
-            if ($requiredVersion !== '0.0.0' && version_compare($this->clientVersion, $requiredVersion, '<')) {
+            if (!$this->meetsClientVersion($requiredVersion)) {
                 return false;
             }
         }
 
         return true;
+    }
+
+    /**
+     * Whether the reported client version satisfies a requirement.
+     *
+     * An unknown version is not evidence of an old client. Bleeding-edge builds
+     * report `clash.meta/alpha-<hash>` or `mihomo/alpha-<hash>`, which carry no
+     * numeric version at all, and the User-Agent is often just `Clash`. Treating
+     * those as "too old" silently dropped the newest nodes — hysteria2 with v2
+     * parameters, ECH — from exactly the clients that support them, while older
+     * clients that do report a version were served normally.
+     *
+     * With no version to compare, the node is kept: a client that genuinely
+     * cannot parse it skips that one proxy and still loads the rest.
+     */
+    protected function meetsClientVersion(string $requiredVersion): bool
+    {
+        if ($requiredVersion === '0.0.0') {
+            return true;
+        }
+
+        $version = trim((string) $this->clientVersion);
+        if ($version === '') {
+            return true;
+        }
+
+        return version_compare($version, $requiredVersion, '>=');
     }
 
     /**

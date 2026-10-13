@@ -169,9 +169,23 @@ class ClashMeta extends AbstractProtocol
 
         $yaml = Yaml::dump($config, 2, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
+
+        // An account without an expiry must not send an empty `expire=`: mihomo
+        // parses the header field by field and logs
+        // "get subscription-userinfo: failed to parse value ''" on every fetch.
+        $userInfo = sprintf(
+            'upload=%d; download=%d; total=%d',
+            (int) $user['u'],
+            (int) $user['d'],
+            (int) $user['transfer_enable']
+        );
+        if (!empty($user['expired_at'])) {
+            $userInfo .= '; expire=' . (int) $user['expired_at'];
+        }
+
         return response($yaml)
             ->header('content-type', 'text/yaml')
-            ->header('subscription-userinfo', "upload={$user['u']}; download={$user['d']}; total={$user['transfer_enable']}; expire={$user['expired_at']}")
+            ->header('subscription-userinfo', $userInfo)
             ->header('profile-update-interval', '24')
             ->header('content-disposition', 'attachment;filename*=UTF-8\'\'' . rawurlencode($appName));
     }
