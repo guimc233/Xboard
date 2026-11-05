@@ -41,6 +41,12 @@ check('vless reality-config derived', ($l['reality-config']['dest'] ?? '') === '
 check('vless reality short-id array', ($l['reality-config']['short-id'] ?? []) === ['abcd']);
 check('vless has no certificate without cert_config', !isset($l['certificate']));
 
+$l = ListenerBuilder::build($node(['vless'], ['tls' => 2, 'reality_settings' => [
+    'server_name' => 'www.microsoft.com', 'private_key' => 'pk', 'short_id' => 'abcd',
+]], ['cert_config' => ['cert_mode' => 'content', 'cert_content' => 'CERT', 'key_content' => 'KEY']]));
+check('reality listener ignores TLS certificate', !isset($l['certificate']));
+check('reality dest port defaults to 443 when unset', ($l['reality-config']['dest'] ?? '') === 'www.microsoft.com:443');
+
 $l = ListenerBuilder::build($node(['tuic'], ['version' => 5, 'alpn' => ['h3'], 'congestion_controller' => 'bbr'], [
     'cert_config' => ['cert_mode' => 'content', 'cert_content' => 'CERT', 'key_content' => 'KEY'],
 ]));

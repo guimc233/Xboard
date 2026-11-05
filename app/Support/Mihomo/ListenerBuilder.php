@@ -42,8 +42,11 @@ class ListenerBuilder
 
         // TLS material comes from the node certificate config, never from the
         // protocol settings, so a rotated certificate only touches one place.
-        $listener = array_merge($listener, self::tlsOptions($type, $settings, $node));
-        $listener = array_merge($listener, self::realityOptions($type, $settings));
+        // REALITY and a TLS certificate are mutually exclusive in mihomo, so
+        // resolve REALITY first and withhold the certificate when it is used.
+        $reality = self::realityOptions($type, $settings);
+        $listener = array_merge($listener, self::tlsOptions($type, $settings, $node, $reality !== []));
+        $listener = array_merge($listener, $reality);
 
         // mihomo's Shadowsocks inbound authenticates with a single password
         // (there is no per-user list), so fall back to the shared server PSK
@@ -488,12 +491,15 @@ class ListenerBuilder
      * @param array<string, mixed> $node
      * @return array<string, mixed>
      */
-    private static function tlsOptions(string $type, array $s, array $node): array
+    private static function tlsOptions(string $type, array $s, array $node, bool $realityActive = false): array
     {
         $options = [];
         $needsTls = Mihomo::requiresTls($type) || Mihomo::supportsTls($type);
 
-        if ($needsTls) {
+        // A REALITY listener must not carry a certificate: mihomo answers
+        // "security modes are mutually exclusive: certificate, reality" and
+        // never binds the port.
+        if ($needsTls && !$realityActive) {
             $material = self::certificateMaterial($node);
             if ($material !== null) {
                 $options['certificate'] = $material['certificate'];
@@ -588,7 +594,9 @@ class ListenerBuilder
         }
 
         $serverName = (string) data_get($s, 'reality_settings.server_name', '');
-        $serverPort = (int) data_get($s, 'reality_settings.server_port', 443);
+        // An unset port must fall back to 443: (int) null is 0 and a
+        // "dest: host:0" makes every REALITY handshake time out.
+        $serverPort = (int) (data_get($s, 'reality_settings.server_port') ?: 443);
         $shortId = (string) data_get($s, 'reality_settings.short_id', '');
 
         $config = array_filter([
