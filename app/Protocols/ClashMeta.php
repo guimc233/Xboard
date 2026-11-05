@@ -166,6 +166,7 @@ class ClashMeta extends AbstractProtocol
         });
         $config['proxy-groups'] = array_values($config['proxy-groups']);
         $config = $this->buildRules($config);
+        $config = self::applyDnsEcs($config, (string) request()->getClientIp());
 
         $yaml = Yaml::dump($config, 2, 4, Yaml::DUMP_EMPTY_ARRAY_AS_SEQUENCE);
         $yaml = str_replace('$app_name', admin_setting('app_name', 'XBoard'), $yaml);
@@ -188,6 +189,58 @@ class ClashMeta extends AbstractProtocol
             ->header('subscription-userinfo', $userInfo)
             ->header('profile-update-interval', '24')
             ->header('content-disposition', 'attachment;filename*=UTF-8\'\'' . rawurlencode($appName));
+    }
+
+    /**
+     * Append an EDNS Client Subnet hint to the template's DNS servers when the
+     * subscriber is outside mainland China, so domestic CDNs hand out their
+     * China-optimised records. Chinese subscribers keep the template as-is.
+     *
+     * @param array<string, mixed> $config
+     * @return array<string, mixed>
+     */
+    public static function applyDnsEcs(array $config, string $clientIp): array
+    {
+        if (\App\Support\IpRegion::isChina($clientIp) !== false) {
+            return $config;
+        }
+
+        $dns = $config['dns'] ?? null;
+        if (!is_array($dns) || empty($dns['nameserver']) || !is_array($dns['nameserver'])) {
+            return $config;
+        }
+
+        $dns['nameserver'] = array_map(
+            static fn ($server) => self::withEcs($server),
+            $dns['nameserver']
+        );
+        $config['dns'] = $dns;
+
+        return $config;
+    }
+
+    /**
+     * Only DoH/DoT/DoQ servers accept the `#ecs=` parameter; plain UDP entries
+     * would be rejected by the kernel.
+     *
+     * @param mixed $server
+     * @return mixed
+     */
+    private static function withEcs($server)
+    {
+        if (!is_string($server)) {
+            return $server;
+        }
+
+        $server = trim($server);
+        if ($server === '' || preg_match('#^(https?|tls|quic|h3)://#i', $server) !== 1) {
+            return $server;
+        }
+        if (str_contains($server, 'ecs=')) {
+            return $server;
+        }
+
+        return $server . (str_contains($server, '#') ? '&' : '#') . 'ecs=223.5.5.0/24&ecs-override=true';
     }
 
     /**

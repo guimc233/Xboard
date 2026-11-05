@@ -252,5 +252,20 @@ foreach (App\Models\Server::VALID_TYPES as $type) {
     check("{$type} is subscription-capable", Mihomo::isSubscriptionType($type));
 }
 
+echo "\n== dns ecs ==\n";
+$dnsTemplate = ['dns' => ['nameserver' => [
+    'https://doh.pub/dns-query',
+    'tls://dot.pub:853',
+    '223.5.5.5',
+]]];
+$overseas = ClashMeta::applyDnsEcs($dnsTemplate, '8.8.8.8');
+check('ecs added for overseas client', str_contains($overseas['dns']['nameserver'][0], '#ecs=223.5.5.0/24&ecs-override=true'));
+check('ecs added for DoT entry', str_contains($overseas['dns']['nameserver'][1], 'ecs=223.5.5.0/24'));
+check('plain udp nameserver untouched', $overseas['dns']['nameserver'][2] === '223.5.5.5');
+$domestic = ClashMeta::applyDnsEcs($dnsTemplate, '114.114.114.114');
+check('ecs skipped for mainland client', $domestic['dns']['nameserver'][0] === 'https://doh.pub/dns-query');
+$private = ClashMeta::applyDnsEcs($dnsTemplate, '192.168.1.1');
+check('ecs skipped for private address', $private['dns']['nameserver'][0] === 'https://doh.pub/dns-query');
+
 echo "\n" . ($fail === 0 ? "ALL CHECKS PASSED\n" : "$fail CHECK(S) FAILED\n");
 exit($fail === 0 ? 0 : 1);
