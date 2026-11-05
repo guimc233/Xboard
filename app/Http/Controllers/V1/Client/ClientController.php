@@ -190,6 +190,14 @@ class ClientController extends Controller
             }
         }
 
+        // FlClash reports its own release version (e.g. 0.9.3), not the version
+        // of the bundled mihomo core. Comparing it against core-version
+        // requirements silently drops nodes the client does support, so treat
+        // it as unknown: meetsClientVersion() keeps nodes for unknown versions.
+        if ($clientName === 'flclash') {
+            $clientVersion = null;
+        }
+
         return [
             'flag' => $flag,
             'name' => $clientName,
